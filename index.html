@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>REEF Booking Program Manager</title>
+<link rel="stylesheet" href="css/app.css">
+<style>
+#gate{max-width:520px;margin:9vh auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px}
+#gate h1{margin:0 0 6px;color:var(--navy);font-size:22px}
+#gate input[type=password],#gate input[type=text]{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin:8px 0}
+#gate button.go{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:10px 16px;width:100%}
+#err{color:var(--red);margin-top:8px;font-size:13px;white-space:pre-wrap}
+.statusbar{background:#2b2b2b;color:#fff;padding:5px 16px;font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.statusbar b{color:#ffd166}
+.btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:7px 12px}
+.btn.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.diff td{vertical-align:top}.diff .bf{color:var(--red);text-decoration:line-through}.diff .af{color:var(--green);font-weight:600}
+textarea{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px}
+</style></head>
+<body>
+<div id="gate">
+  <h1>REEF Booking Program Manager</h1>
+  <p class="lead">Internal staff workspace. Enter your own Airtable personal access token to load live bookings. It is kept in this browser tab only, is sent only to Airtable, and is never saved to the site.</p>
+  <label class="small">Airtable personal access token</label>
+  <input id="tok" type="password" autocomplete="off" placeholder="pat..." spellcheck="false">
+  <label class="small"><input id="rem" type="checkbox"> Keep me connected while this tab stays open</label>
+  <p class="note">Needs scope <b>data.records:read</b> on the <b>REEF Bookings | PILOT</b> base. Use a read-only token until editing is switched on. Create one in Airtable: Account, Developer hub, Personal access tokens.</p>
+  <button class="go" id="go">Load bookings</button>
+  <div id="err"></div>
+</div>
+<div id="app" hidden>
+  <div class="statusbar" id="statusbar"></div>
+  <header class="top">
+    <h1>REEF Booking Program Manager</h1><span class="sub" id="who"></span><span class="spacer"></span>
+    <label class="role">View
+      <select id="roleSel"><option value="staff">Staff view (customer-facing prices)</option><option value="rose">Pricing &amp; costs view</option></select></label>
+    <button class="hbtn" id="refresh">Refresh</button><button class="hbtn" id="help">Help</button><button class="hbtn" id="disc">Disconnect</button>
+  </header>
+  <div class="layout"><nav class="side" id="nav"></nav><main id="main"></main></div>
+</div>
+<aside class="drawer" id="drawer"></aside>
+<script src="js/config.js"></script>
+<script src="js/adapter-airtable.js"></script>
+<script src="js/pricing.js"></script>
+<script src="js/edits.js"></script>
+<script src="js/app.js"></script>
+</body></html>
