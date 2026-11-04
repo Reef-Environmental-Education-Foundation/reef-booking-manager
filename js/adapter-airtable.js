@@ -18,6 +18,8 @@
     vendors: {name:"fldJXlYdLLboDvdDU", cat:"fldaWx0fSdL6deDWg", status:"fldoONPWl4JtotDzS", contact:"fldHVWeeKftCAfFMh", phone:"fldJVmTUvlkzPbPob", email:"fldAWfCCJfzt4plsO", web:"fldsAgdnwAfoPYGeA", leadDays:"fldeCaHdOva3g9pac", notes:"fldnGGn4WhxlKvFwh", rates:"fldUdAUH5A6EJnu4O", review:"fldkhtn0JHNdONoQs", confirmedOn:"fld2DOIVJo7OH2sAs", confirmed:"fldhbQRFsKkElrzMc", actions:"fld80PJPPYuLIuE4k"},
     rates: {key:"fldRYBqehbV1cckD9", name:"fldadLk6n35nhrTv3", cat:"fldzbw4Aurpts8776", vendor:"fldNcPkwaDQiOkJ1n", vendorName:"fldjDksddglOGCstH", cur:"fldoteimNwlYE0l6g", num:"fldgwo9ZQv09nEFhr", text:"fldgUzBiszA77SWGr", unit:"fldzag1pINQmNbX9S", eff:"fld6VhsDbajSsIlAv", active:"fldfbnyHWr1Lu2YEI", notes:"fldZ4XX8ZTKiMuRq2", status:"fldcZViXxZuaWm791", avail:"fldcOWfy9rUIpSQy9", confirmedOn:"fld5afjY8nc4arXDm", reviewDue:"fldOtWHLr9RNtlKbg"},
     itin: {label:"fldJq0vMyOnAQsp2Y", booking:"fldOPFdBGlO0RvXCG", name:"fldgYk2RvZ6eMZdUF", desc:"fldbCkHmE1mN0G0dK", loc:"fldAiAJJeBnvcvdtV", check:"fldkllfXJ3ZQ4vCZQ"},
+    vlines: {name:"fldi4cb2KFvPnjf9B", booking:"fld0WOZ2MMpG7t5NZ", vendor:"fldRseKtnt6jz0FKn", type:"fldELZFsX0yCRDfJX", status:"fld7YpSdZzINo0g7g", vessels:"fldMC1SN8Yl8TcYUl", cap:"fldSyzdvjThOaRdf7", quote:"fldysAAXSC3ozTN6F", perPerson:"fldsoPo2OAMK81Fcb", date:"fldakh7UvCvDxbisK", notes:"flddl6TYjkDr9SeFk"},
+    versions: {label:"fldTiFQ19SLP9Wp9E", booking:"fld9shgPkcovzaeqY", version:"fldo9lLqOFJTBtgUt", total:"fldoYWMVJkbBK1dFd", students:"fldxWZsJpLZHTyMCI", chaps:"fldB3hUbdHYYljQEe", arrival:"fldUBjgPZLoTjDglV", commit:"fldlzzrdRqK77y105", path:"fldDjbNflYjOuvlOp", at:"fldkBodBHe3GJHsf5"},
     activities: {name:"fldkS3bfc5eMBvXW6", cap:"fld41xUflvXl26F4W", capUnit:"fldrZZwJqwVzOCVko", hours:"fld7qoLnTVqNpBMYF", boat:"fldn8AvFcNnsnhmvM", vendor:"fldilW7iChIgzL8ZO", active:"fldJfT2otiFRU8r0W", notes:"fldtAqa4z7eJIhqOR"}
   };
 
@@ -79,6 +81,12 @@
       const rest = {};
       for (const k of ["schedule", "comms", "checklist", "changes", "vendors", "rates", "itin", "activities"]) {
         rest[k] = await listAll(C.T[k], null, step(k));
+      }
+      // Optional tables: absent or unreadable must never break the app.
+      rest.optionalMissing = [];
+      for (const k of ["versions", "vlines"]) {
+        if (!C.T[k]) { rest[k] = []; rest.optionalMissing.push(k); continue; }
+        try { rest[k] = await listAll(C.T[k], null, step(k)); } catch (e) { rest[k] = []; rest.optionalMissing.push(k); }
       }
       return Object.assign({ bookings, loadedAt: new Date().toISOString() }, rest);
     },

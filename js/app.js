@@ -18,10 +18,10 @@
   function build(data) {
     const by = (rows, linkId) => { const m = {}; rows.forEach(r => (r.fields[linkId] || []).forEach(b => (m[b] = m[b] || []).push(r))); return m; };
     const X = D.FX, sch = by(data.schedule, X.schedule.booking), com = by(data.comms, X.comms.booking), chk = by(data.checklist, X.checklist.booking),
-      chg = by(data.changes, X.changes.booking), itn = by(data.itin, X.itin.booking);
+      chg = by(data.changes, X.changes.booking), itn = by(data.itin, X.itin.booking), ver = by(data.versions || [], X.versions.booking), vl = by(data.vlines || [], X.vlines.booking);
     S.bookings = data.bookings.map(r => {
       const raw = r.fields;
-      return { id: r.id, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [] };
+      return { id: r.id, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [], versions: ver[r.id] || [], vlines: vl[r.id] || [] };
     });
     S.bookings.sort((a, b) => String(a.g("arrival") || "9999").localeCompare(String(b.g("arrival") || "9999")));
   }
@@ -192,6 +192,7 @@
         <label class="ctl">Gratuity ($/person/trip)<input id="vGrat" type="number" min="0" value="${P.R.gratuity}"></label>
         <label class="ctl">Quote status<select id="vStat"><option>Assumption</option><option>Requested</option><option>Quoted</option><option>Confirmed</option></select></label></div>
       <div id="vOut" class="mt"></div></div>
+      <div class="card"><h3>Vendor lines for this booking</h3>${vlinesCard(b)}</div>' : '<div class="note">Vendor lines will list here.</div>'}</div>
       <h3>Vendors on file</h3>${vs.map(v => { const rs = ratesOf(v); return `<div class="card"><b>${esc(v.fields[X.name])}</b> ${chip("plan", txt(v.fields[X.status]) || "—")} ${v.fields[X.review] ? chip("notb", txt(v.fields[X.review])) : ""}
         <div class="small">${esc(txt(v.fields[X.cat]))} · lead time ${esc(v.fields[X.leadDays] ?? "—")} days · confirmed ${esc(fmtD(v.fields[X.confirmedOn]))}</div>
         ${rs.length ? `<table class="mt"><tr><th>Rate</th><th class="num">Value</th><th>Status</th><th>Availability</th><th>Confirmed</th></tr>${rs.map(r => `<tr><td>${esc(r.fields[XR.name] || r.fields[XR.key])}</td><td class="num">${rateVal(r) == null ? "—" : esc(rateVal(r))}</td><td>${esc(txt(r.fields[XR.status]))}</td><td>${esc(txt(r.fields[XR.avail]))}</td><td>${esc(fmtD(r.fields[XR.confirmedOn]))}</td></tr>`).join("")}</table>` : '<div class="note mt">No rates on file.</div>'}
@@ -259,7 +260,22 @@
       ${field("Final payment", b.g("finalAmt") == null ? "—" : money2(b.g("finalAmt")) + " due " + esc(fmtD(b.g("finalDue"))))}
       ${field("Guarantee lock date", esc(fmtD(b.g("lockDate"))))}${field("Minimum guaranteed paid spaces (85%)", esc(b.g("minGuarSpaces")))}${field("Guaranteed program cost", money2(b.g("guarCost")))}${field("Final roster due", esc(fmtD(b.g("rosterDue"))))}
       ${b.g("depositNow") != null ? field("Legacy 'Deposit Due Now' field", money(b.g("depositNow")) + ' <span class="note">(old flat deposit; differs from the agreement deposit above)</span>') : ""}</div>
+      <div class="card"><h3>Published versions</h3>${versionsTable(b)}</div>
       <div class="card"><h3>Acceptance</h3>${field("Acceptance status", esc(txt(b.g("acceptance"))))}${field("Accepted proposal version", esc(b.g("acceptedVer") ?? "—"))}${field("Current proposal version", esc(b.g("propVer")))}</div>`;
+  }
+
+  function vlinesCard(b) {
+    if (S.data.optionalMissing && S.data.optionalMissing.includes("vlines")) return '<div class="note">The Booking Vendor Lines table could not be read with this token, so quotes cannot be shown here. The boat cost on this booking still comes from the default rate.</div>';
+    const XL = D.FX.vlines, rows = b.vlines.map(r => r.fields);
+    if (!rows.length) return '<div class="note">No vendor lines recorded for this booking yet. The boat cost still comes from the default rate (8 charters at the Rates-table price is an estimate, not a quote). Add a line in Airtable (Booking Vendor Lines) with vessels available, capacity per vessel and the quote per departure, and it will show here.</div>';
+    return `<table><tr><th>Line</th><th>Type</th><th>Status</th><th class="num">Vessels</th><th class="num">Capacity</th><th class="num">Quote / departure</th><th class="num">Per person</th><th>Quote date</th></tr>${rows.map(r => `<tr><td>${esc(r[XL.name] || "")}</td><td>${esc(txt(r[XL.type]))}</td><td>${esc(txt(r[XL.status]))}</td><td class="num">${esc(r[XL.vessels] ?? "—")}</td><td class="num">${esc(r[XL.cap] ?? "—")}</td><td class="num">${r[XL.quote] != null ? money(r[XL.quote]) : "—"}</td><td class="num">${r[XL.perPerson] != null ? money(r[XL.perPerson]) : "—"}</td><td>${esc(fmtD(r[XL.date]))}</td></tr>`).join("")}</table><div class="note">Display only for now. These lines do not change the price until the pricing mirror is switched to read them.</div>`;
+  }
+
+  function versionsTable(b) {
+    const XV = D.FX.versions, rows = b.versions.map(r => r.fields).sort((a, c) => (a[XV.version] || 0) - (c[XV.version] || 0));
+    if (!rows.length) return '<span class="note">No versions recorded yet. This ledger fills in once the publish workflow writes one row per publish (planned: accepted-version display).</span>';
+    const acc = b.g("acceptedVer");
+    return `<table><tr><th>Version</th><th class="num">Total</th><th class="num">Students</th><th>Arrival</th><th>Published</th><th></th></tr>${rows.map(r => `<tr><td>v${esc(r[XV.version])}</td><td class="num">${money(r[XV.total])}</td><td class="num">${esc(r[XV.students] ?? "—")}</td><td>${esc(fmtD(r[XV.arrival]))}</td><td>${esc(fmtD(r[XV.at]))}</td><td>${acc != null && acc === r[XV.version] ? chip("live", "Accepted") : ""}</td></tr>`).join("")}</table>`;
   }
 
   /* Edit preview (dry-run) */
@@ -269,7 +285,8 @@
       <div class="banner b"><div><strong>Nothing is saved from this screen.</strong>It shows what a change would do, checks it, and shows the approval impact. Real saving stays off until the permission, validation and change-tracking checks pass on test records.</div></div>
       ${appr ? '<div class="warn">This booking is Approved to Share. Fields marked ⚠ would un-approve it.</div>' : '<div class="note">Working draft: editing does not trigger approval resets.</div>'}
       <div class="grid g3">${ks.map(k => `<label class="ctl">${esc(C.EDITABLE[k].label)}${C.EDITABLE[k].watched ? " ⚠" : ""}<input data-e="${k}" value="${esc(b.raw[F[k]] == null ? "" : b.raw[F[k]])}"></label>`).join("")}</div>
-      <p><button class="btn" id="prev">Preview changes</button></p><div id="planOut"></div></div>`;
+      <p><button class="btn" id="prev">Preview changes</button></p><div id="planOut"></div></div>
+      ${appr ? `<div class="card"><h3>Start a new draft ${chip("plan", "PLANNED")}</h3><p class="small">To revise this approved booking without surprise resets: un-approve once on purpose, bump the Proposal Version from v${esc(b.g("propVer"))} to v${esc((b.g("propVer") || 0) + 1)}, edit freely, then approve once when ready. The school's live page stays up until you republish. This is not enabled yet; today, un-check Approved to Share in Airtable first.</p></div>` : ""}`;
   }
   function wireEdit() {
     const b = cur();

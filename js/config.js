@@ -2,12 +2,14 @@
    Contains Airtable IDs only (structure, not data). No tokens, no booking data.
    Airtable base/table/field IDs are identifiers, not secrets: they are useless without a token. */
 window.REEF_CONFIG = {
-  VERSION: "0.2.0-readonly",
+  VERSION: "0.3.0-readonly",
   BASE_ID: "app3FIECuG8iQr7kY",
   T: {
     bookings: "tbl9Jb9UVSYLQ1Puc", vendors: "tblu7zzoyc0UdHwz4", rates: "tbltdE9P1BnOoPlbL",
     schedule: "tbljjmfCplSFbUfGe", comms: "tbla8wjwBvfbjuaFw", checklist: "tbl6BmRXNhnxxfabD",
-    changes: "tblPHwDDAvjER2uGe", itin: "tblL0oUvD4CG24E4j", activities: "tblb3FriVJzQcCBXu"
+    changes: "tblPHwDDAvjER2uGe", itin: "tblL0oUvD4CG24E4j", activities: "tblb3FriVJzQcCBXu",
+    versions: "tbluKC2sTvtaypK7W",   // Proposal Versions (created 11/3, written by the publish workflow once Option C is built)
+    vlines: "tblkcaDalE4TtQ3FE"                     // Booking Vendor Lines: set to the table ID once Martha approves creating it
   },
   /* ---- WRITE SAFETY SWITCHES (all off). Do not change without Martha's written go-ahead. ---- */
   WRITES_ENABLED: false,          // master switch. false = dry-run only, no network write ever leaves the page

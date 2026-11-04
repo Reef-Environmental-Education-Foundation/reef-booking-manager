@@ -16,6 +16,7 @@ Object.keys(rk).forEach((k, i) => tbl[T.rates].push(mk("recRK" + i, { fldRYBqehb
 tbl[T.schedule] = [mk("recS1", { fld3IFyuSMhEhIk3j: ["recAAAAAAAAAAAAA2"], fldD5F2jqNh98G059: 1, fldyF4IOUHnjLBOhe: "A", fld6ZXXwtnyVQXiJz: "09:00", flduffPfhDSfUpoRs: "10:00", fldA1uxhbnsdlnM53: "Fish ID", fldBdQbcgMPNih7dn: "OK" })];
 tbl[T.comms] = [mk("recC1", { fld0yV06EMb364wDo: ["recAAAAAAAAAAAAA1"], fldyfBpgjI99tPxqR: "Sent proposal", fldqOd7K3DlVNYYAG: "2026-10-20" })];
 tbl[T.checklist] = [mk("recK1", { fldl9U7R5wd51QTCQ: ["recAAAAAAAAAAAAA1"], fld0QmKxGP1qn0S1C: "Roster", fldyIZDGmyfULPD8x: true })];
+tbl["tbluKC2sTvtaypK7W"] = [mk("recV1", { fld9shgPkcovzaeqY: ["recAAAAAAAAAAAAA2"], fldo9lLqOFJTBtgUt: 1, fldoYWMVJkbBK1dFd: 8500, fldxWZsJpLZHTyMCI: 60, fldUBjgPZLoTjDglV: "2027-03-17", fldkBodBHe3GJHsf5: "2026-10-01T12:00:00.000Z" })];
 const log = []; let writeAttempts = 0;
 const srv = http.createServer((q, r) => { const p = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]); fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); r.end(); } else { r.writeHead(200, { "Content-Type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(d); } }); });
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; console.log((c ? "PASS " : "FAIL ") + m); };
@@ -77,6 +78,9 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; console.log(
   await pg.fill("[data-e=students]", "61"); await pg.click("#prev");
   ok(/un-approve it, bump the Proposal Version to 3/.test(await pg.textContent("#planOut")), "approved booking: warns about un-approve + version bump");
   await pg.click("nav button:has-text('Overview')"); ok(/not published yet/.test(await pg.textContent("#main")), "unpublished approved version is flagged");
+  await pg.click("nav button:has-text('Contracts')"); ok(/Published versions/.test(await pg.textContent("#main")) && /v1/.test(await pg.textContent("#main")), "contracts tab lists published versions from the Proposal Versions table");
+  await pg.click("nav button:has-text('Edit')"); ok(/Start a new draft/.test(await pg.textContent("#main")), "approved booking shows the start-new-draft explanation");
+  await pg.click("nav button:has-text('Vendor')"); ok(/No vendor lines recorded/.test(await pg.textContent("#main")), "vendor tab shows empty vendor-lines state");
   // 9 program
   await pg.click("nav button:has-text('Program')"); ok(/Fish ID/.test(await pg.textContent("#main")), "schedule block displays");
   await pg.screenshot({path:process.env.SHOT||"/tmp/shot.png"});
