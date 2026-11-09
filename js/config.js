@@ -53,11 +53,15 @@ window.REEF_CONFIG = {
     // links
     scheduleLinks: "fldU7Wh5iEubsYwxI", itinLinks: "fldAmdGgbJThGCufS", commsLinks: "fldu4exjBCBHPiPlk", checklistLinks: "fld4sbsDUaysZquHi", changeLinks: "fldTKpwFsYBDlqLVA",
     activities: "fldLJq96jdno7p9sS", programType: "fldnMmE0udfDe8ke2", cohorts: "fldxhHNKnDAIN4ubk", rotation: "fldOr4EoGbIrunomi",
+    // 2027 meals + lodging (internal). Lodging reservation contacts are deliberately NOT listed: never read or shown.
+    mealCount: "fldRg3ccjUTaFCtpc", mealReview: "fld5DDgBNdMABfxFI", mealDeadline: "fldVZp8BvBoTNzJ0v", mealOpen: "fldxtw6lqJut4PeP6",
+    lodgeCode: "fld5CvdfXfeXlZkJv", lodgeReleased: "fldjnrqH2QKI6Xpws", lodgeUsedCode: "fldDtxpFOmmZ8sS5f",
+    mealVendorCost: "fldyG2j53bTHydu9c", mealMargin: "fldjnRfqLzo8dz7eG", combinedMargin: "fldvZeOcYz1Xplauw",
     schedNotes: "fldLM08w3h7sokUZF", walkthrough: "fldDUh5DMgXDOVaoN", daysToArrival: "fldVkGBpwOofwLobv"
   },
   /* Fields that show REEF's internal cost or margin. A scoped token can still read these.
      Hiding them in the page is a courtesy for the "Staff view", NOT security.  */
-  INTERNAL_KEYS: ["netIncome","totalCost","margin","marginPct","marginSummary","staffLabor","campusCost","directExp","mileage","materialsActual","manualVendorEst"],
+  INTERNAL_KEYS: ["netIncome","totalCost","margin","marginPct","marginSummary","staffLabor","campusCost","directExp","mileage","materialsActual","manualVendorEst","mealVendorCost","mealMargin","combinedMargin"],
 
   /* Inputs the Airtable guardrail automation watches (wflxS2mTwBFYpj5kC). Editing any while Approved to Share is ON
      un-approves, bumps the Proposal Version and alerts Martha in Slack. Read from the live automation 2026-11-03. */

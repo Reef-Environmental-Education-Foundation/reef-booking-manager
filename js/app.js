@@ -32,6 +32,26 @@
   const isTest = b => String(b.g("name") || "").startsWith(C.TEST_PREFIX);
   const internal = html => S.role === "rose" ? html : "";
 
+  /* Meals & lodging (internal). Count formula fields come back as numbers; a missing/0 count means no meals. */
+  const mealN = b => Number(b.g("mealCount")) || 0;
+  const yesNo = v => v === true || /^(yes|true|checked)$/i.test(String(txt(v) || "")) ? "Yes" : v === false || /^(no|false)$/i.test(String(txt(v) || "")) ? "No" : "";
+  function mealsLine(b) {
+    if (!mealN(b)) return "";
+    const rv = Number(b.g("mealReview")) || 0, dl = b.g("mealDeadline");
+    return `<div class="m">Meals: ${mealN(b)} · ${rv ? rv + " to review" : "none to review"}${dl ? " · order by " + esc(fmtD(dl)) : ""}</div>`;
+  }
+  function mealsLodging(b) {
+    const n = mealN(b), rv = Number(b.g("mealReview")) || 0, dl = b.g("mealDeadline"), dd = daysTo(dl), open = b.g("mealOpen");
+    const meals = n ? field("Meals (not cancelled)", esc(n)) + field("Needing review", rv ? chip("chk", rv + " to review") : "0")
+        + field("Next order deadline", dl ? esc(fmtD(dl)) + (dd != null ? ` <span class="note">(${dd >= 0 ? dd + " days" : Math.abs(dd) + " days ago"})</span>` : "") : "")
+        + field("Open items", open ? `<span style="white-space:pre-line">${esc(txt(open))}</span>` : "")
+      : '<div class="note">No meals on this booking.</div>';
+    return `<div class="card"><h3>Meals ${chip("live", "INTERNAL")}</h3>${meals}
+        ${internal(n ? `<h3 class="mt">Meal cost &amp; margin ${chip("proto", "PRICING VIEW")}</h3>${field("Est. vendor cost", money2(b.g("mealVendorCost")))}${field("Meals margin", money2(b.g("mealMargin")))}${field("Combined margin incl. meals", money2(b.g("combinedMargin")))}` : "")}</div>
+      <div class="card"><h3>Lodging ${chip("live", "INTERNAL")}</h3>${field("Lodging access code", esc(b.g("lodgeCode")))}${field("Lodging info released", esc(fmtD(b.g("lodgeReleased"))))}${field("Booked using REEF code", esc(yesNo(b.g("lodgeUsedCode"))))}
+        <div class="note mt">Schools arrange and pay for lodging directly. Recommendations go to a school only in a staff message that includes the access code. Lodging reservation contacts are not read or shown here.</div></div>`;
+  }
+
   function flags(b) {
     const f = [];
     const check = b.g("check"); if (check) String(check).split("\n").map(s => s.replace(/^•\s*/, "").trim()).filter(Boolean).forEach(x => f.push(["y", x, "Airtable 'Check' formula field on the booking"]));
@@ -85,7 +105,7 @@
     return `<div class="bcard ${cls}" onclick="REEF_UI.go('booking','${b.id}','overview')">
       <div><div class="t">${esc(b.g("org") || b.g("name"))}${isTest(b) ? " " + chip("notb", "TEST") : ""}</div><div class="m">${esc(txt(b.g("type")) || "")} · ${esc(txt(b.g("location")) || "")}</div></div>
       <div><div>${esc(fmtD(b.g("arrival")))}</div><div class="m">${d == null ? "no date" : d >= 0 ? d + " days out" : Math.abs(d) + " days ago"}</div></div>
-      <div><div>${esc(b.g("students") || 0)} students + ${esc(b.g("chaps") || 0)} chaps</div><div class="m">${money(b.g("total"))}</div></div>
+      <div><div>${esc(b.g("students") || 0)} students + ${esc(b.g("chaps") || 0)} chaps</div><div class="m">${money(b.g("total"))}</div>${mealsLine(b)}</div>
       <div><div>${chip("plan", txt(b.g("status")) || "—")}</div><div class="m">${fl.length ? `<details class="why" onclick="event.stopPropagation()"><summary>${fl.length} item${fl.length > 1 ? "s" : ""} to check</summary>${fl.map(x => `<div class="small">• ${esc(x[1])}<br><i>Source: ${esc(x[2])}</i></div>`).join("")}</details>` : "Nothing flagged"}</div></div>
       <div>›</div></div>`;
   }
@@ -135,6 +155,7 @@
         <h3 class="mt">Where it stands</h3>${field("Status", esc(txt(b.g("status"))))}${field("Proposal", esc(b.g("proposalSent") ? "Sent " + fmtD(b.g("proposalSent")) : "Not sent"))}${field("Response", esc(txt(b.g("response"))))}${field("Acceptance", esc(txt(b.g("acceptance"))))}${field("Agreement", esc(txt(b.g("agreementStatus"))))}${field("Payment", esc(txt(b.g("paymentStatus"))))}</div></div>
       <div class="card"><h3>Approval &amp; publishing</h3>${field("Approved to Share", appr ? chip("live", "Approved v" + (b.g("approvedVer") ?? "?")) : chip("notb", "Working draft"))}${field("Proposal version (current)", esc(b.g("propVer")))}${field("Published version (live page)", esc(b.g("publishedVer") ?? "none"))}${field("Last publish result", esc(txt(b.g("publishResult"))))}${field("Accepted by school", esc(b.g("acceptedVer") != null ? "v" + b.g("acceptedVer") : "Not accepted"))}
         <div class="note mt">${appr ? "Approved: changing headcount, dates, activities or price inputs will un-approve and alert Martha. To keep editing freely, start a new draft first." : "Working draft: edit freely. Nothing reaches the school until it is approved and published."}</div></div>
+      ${mealsLodging(b)}
       <div class="card"><h3>Next steps</h3>${field("Next action", esc(b.g("nextAction")))}${field("Follow-up date", esc(fmtD(b.g("followUp"))))}${field("Rose: needs next", esc(txt(b.g("roseNeeds"))))}${field("Risk / missing info", esc(b.g("risk")))}
         <h3 class="mt">Notes</h3><div class="small">${esc(b.g("customerNotes") || "")}</div>${internal(`<div class="small mt"><b>Internal:</b> ${esc(b.g("internalNotes") || "—")}</div>`)}</div>`;
   }
