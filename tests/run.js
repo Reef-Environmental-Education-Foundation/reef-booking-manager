@@ -10,6 +10,8 @@ const bookings = [
   mk("recAAAAAAAAAAAAA4", { [f.name]: "Old Group 2026", [f.org]: "Old Group", [f.status]: "Completed", [f.arrival]: "2026-03-01", [f.students]: 40, [f.total]: 5000 })];
 const BEN = "recAAAAAAAAAAAAA5";
 bookings.push(mk(BEN, { [f.name]: "Synthetic Reef School - Mar 2027", [f.org]: "Synthetic Reef School", [f.status]: "Proposal Sent", [f.type]: "Expedition", [f.arrival]: "2027-03-10", [f.departure]: "2027-03-12", [f.students]: 90, [f.chaps]: 10, [f.aboard]: 109, [f.teamTotal]: 9, [f.fullDays]: 2, [f.arrDepDays]: 0, [f.sessions]: 4, [f.boatTrips]: 0, [f.buses]: 3, [f.activities]: "Boat Snorkel, Pennekamp", [f.progFees]: 14400, [f.supplies]: 3150, [f.campusFee]: 560, [f.pennTotal]: 180, [f.vendorAuto]: 0, [f.manualVendorEst]: 6982, [f.gratTotal]: 1090, [f.addVendor]: 870, [f.subtotal]: 27232, [f.uplift]: 1361.6, [f.total]: 28593.6, [f.pricingModel]: "Per-participant (Expedition / other)", [f.freeChap]: 10, [f.tier]: 2, [f.depositAmt]: 5718.72, [f.depositDue]: "2026-12-01", [f.pay2Amt]: 8578.08, [f.pay2Due]: "2026-12-01", [f.finalAmt]: 14046.8, [f.finalDue]: "2027-02-10", [f.depositNow]: 500, [f.cohorts]: 3, [f.check]: "• Agreement Date blank\n• Vendor quote not confirmed", [f.approved]: false, [f.propVer]: 1, [f.modified]: "2026-11-01T10:00:00.000Z" }));
+Object.assign(bookings.find(b => b.id === BEN).fields, { [f.mealCount]: 3, [f.mealReview]: 1, [f.mealDeadline]: "2027-02-20", [f.mealOpen]: "TEST lunch: confirm headcount\nTEST dinner: vendor reply",
+  [f.lodgeCode]: "TESTCODE-77", [f.lodgeReleased]: "2026-12-01", [f.lodgeUsedCode]: true, [f.mealVendorCost]: 777.25, [f.mealMargin]: 222.75, [f.combinedMargin]: 5555.5 });
 const T = C.T, tbl = {}; Object.keys(T).forEach(k => tbl[T[k]] = []); tbl[T.bookings] = bookings;
 tbl[T.vendors] = [mk("recVEND1", { fldJXlYdLLboDvdDU: "Sample Boat Co", fldaWx0fSdL6deDWg: ["Boat charter"], fldoONPWl4JtotDzS: "Active", fldUdAUH5A6EJnu4O: ["recRATE1"] }), mk("recVEND2", { fldJXlYdLLboDvdDU: "Placeholder Dives", fldaWx0fSdL6deDWg: ["Boat charter"], fldoONPWl4JtotDzS: "Needs Follow-Up" })];
 tbl[T.rates] = [mk("recRATE1", { fldadLk6n35nhrTv3: "Half-day charter", fldNcPkwaDQiOkJ1n: ["recVEND1"], fldoteimNwlYE0l6g: 900, fldcZViXxZuaWm791: "Confirmed", fldcOWfy9rUIpSQy9: "Available" })];
@@ -140,6 +142,21 @@ let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; console.log(
   ok(true, "D5: auto-refresh picked up a change without a click");
   await pg.uncheck("#autoRef"); bookings.find(b => b.id === BEN).fields[f.name] = "Synthetic Reef School - after-off"; await pg.waitForTimeout(1800);
   ok(/auto$/.test(await pg.textContent("#main h2")), "D5: toggling auto-refresh off stops re-reads"); await pg.check("#autoRef");
+  // 9b meals + lodging (synthetic)
+  await pg.selectOption("#roleSel", "staff"); await pg.click("nav button:has-text('Overview')"); let mm = await pg.textContent("#main");
+  ok(/Meals \(not cancelled\)\s*3/.test(mm) && /1 to review/.test(mm) && /Feb 20, 2027/.test(mm) && /TEST dinner: vendor reply/.test(mm), "meals card shows count, needs-review, next order deadline and open items");
+  ok(/TESTCODE-77/.test(mm) && /Dec 1, 2026/.test(mm) && /Booked using REEF code\s*Yes/.test(mm), "lodging card shows access code, released date and booked-using-code status");
+  ok(/not read or shown here/.test(mm), "lodging card states reservation contacts are not shown");
+  ok(!/777\.25|222\.75|5,555|Est\. vendor cost/.test(mm), "staff view hides meal vendor cost and margins");
+  await pg.selectOption("#roleSel", "rose"); mm = await pg.textContent("#main");
+  ok(/\$777\.25/.test(mm) && /\$222\.75/.test(mm) && /\$5,555\.50/.test(mm), "pricing view shows meal cost, meals margin and combined margin"); await pg.selectOption("#roleSel", "staff");
+  await pg.evaluate(() => REEF_UI.go("list")); const bc = await pg.textContent(".bcard:has-text('Synthetic Reef')");
+  ok(/Meals: 3 · 1 to review · order by Feb 20, 2027/.test(bc), "booking list card shows the meal summary");
+  ok(!/Meals:/.test(await pg.textContent(".bcard:has-text('Sample Prep')")), "a booking with no meals shows no meal line in the list");
+  await pg.click(".bcard:has-text('Sample Prep')"); mm = await pg.textContent("#main");
+  ok(/No meals on this booking/.test(mm) && !/Needing review/.test(mm), "a booking with no meals shows a neutral meals card and nothing else");
+  ok(!C.F.lodgeContact && !Object.keys(C.F).some(k => /lodg.*(contact|phone|email)/i.test(k)), "config requests no lodging reservation contact field");
+  await pg.evaluate(() => REEF_UI.go("booking", "recAAAAAAAAAAAAA5", "budget"));
   // screenshots + overflow, synthetic data only
   const shots = process.env.SHOTS || "/tmp";
   for (const [w, h] of [[1280, 900], [390, 844]]) {
