@@ -39,7 +39,7 @@ window.REEF_CONFIG = {
     // price lines (customer-facing)
     progFees: "fldi1aqXISuwqHxut", campusFee: "fldiBD7ZgK1EjUcKy", supplies: "fldbsULEFAXaeZPGN", subtotal: "fld4e4y9GbpsJwjnX",
     uplift: "flduKwWTkcpOzSC6b", discountAmt: "fld3Xhk3MoR8nMget", tax: "fldcoouD1zMQcr66o", total: "fldnuoaZqg9uSnWOd", perPaid: "fldJoWJwTgCwAgyWs",
-    vendorAuto: "fld1NehIhFWZc1Ufw", pennTotal: "fldDExjAVD7sQ3DzH", gratTotal: "fldA5gzNm3Rsh33Jo", pricingModel: "fldElB66WNS33nn9t",
+    vendorAuto: "fld1NehIhFWZc1Ufw", pennTotal: "fldDExjAVD7sQ3DzH", pennVehicles: "fldm17xpAeJp5ibeP", pennEntrance: "fldBcQtlVDCOtEwak", gratTotal: "fldA5gzNm3Rsh33Jo", pricingModel: "fldElB66WNS33nn9t",
     freeChap: "fldWpVEwDKeGkUrcu", billTravelers: "fldH6wc6g8FjSAyhM", reach: "fldewJJhOnqPykADX", teamTotal: "fldwt9q3sL9bAAHla", aboard: "fldcngDArA2pgUjRy",
     // internal (cost / margin)
     netIncome: "fldmphOpOVTHeFPQg", totalCost: "fld4vLRzFATowbHrj", margin: "flddLDxroBRy7u8QT", marginPct: "fld94akrbIWxHO7BG", marginSummary: "flde1ZvY9q1ObSj32",

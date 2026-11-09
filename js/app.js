@@ -23,7 +23,7 @@
       chg = by(data.changes, X.changes.booking), itn = by(data.itin, X.itin.booking), ver = by(data.versions || [], X.versions.booking), vl = by(data.vlines || [], X.vlines.booking);
     S.bookings = data.bookings.map(r => {
       const raw = r.fields;
-      return { id: r.id, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [], versions: ver[r.id] || [], vlines: vl[r.id] || [] };
+      return { id: r.id, created: r.createdTime || null, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [], versions: ver[r.id] || [], vlines: vl[r.id] || [] };
     });
     S.bookings.sort((a, b) => String(a.g("arrival") || "9999").localeCompare(String(b.g("arrival") || "9999")));
   }
@@ -141,7 +141,7 @@
   /* Budget & pricing */
   function inputsOf(b) {
     const people = (b.g("students") || 0) + (b.g("chaps") || 0), aboard = b.g("aboard") || people + (b.g("teamTotal") || 0);
-    return { students: b.g("students") || 0, chaps: b.g("chaps") || 0, staff: Math.max(0, aboard - people) || (b.g("teamTotal") || 0), days: b.g("fullDays") || 0, arrDays: b.g("arrDepDays") || 0, sessions: b.g("sessions") || 0, trips: b.g("boatTrips") || 0, buses: b.g("buses") || 0, discountPct: b.g("discount") || 0, upliftPct: b.g("upliftOverride") == null ? null : b.g("upliftOverride"), addVendor: b.g("addVendor") || 0, materials: b.g("materialsFee") || 0, manualVendor: typeof b.g("manualVendorEst") === "number" ? b.g("manualVendorEst") : null, acts: txt(b.g("activities")) || "", model: txt(b.g("pricingModel")) || "", status: txt(b.g("status")) || "", arrival: b.g("arrival"), type: txt(b.g("type")) || "", freeChapOverride: typeof b.g("freeChapOverride") === "number" ? b.g("freeChapOverride") : null };
+    return { students: b.g("students") || 0, chaps: b.g("chaps") || 0, staff: Math.max(0, aboard - people) || (b.g("teamTotal") || 0), days: b.g("fullDays") || 0, arrDays: b.g("arrDepDays") || 0, sessions: b.g("sessions") || 0, trips: b.g("boatTrips") || 0, buses: b.g("buses") || 0, discountPct: b.g("discount") || 0, upliftPct: b.g("upliftOverride") == null ? null : b.g("upliftOverride"), addVendor: b.g("addVendor") || 0, materials: b.g("materialsFee") || 0, manualVendor: typeof b.g("manualVendorEst") === "number" ? b.g("manualVendorEst") : null, acts: txt(b.g("activities")) || "", model: txt(b.g("pricingModel")) || "", status: txt(b.g("status")) || "", arrival: b.g("arrival"), type: txt(b.g("type")) || "", created: b.created || null, freeChapOverride: typeof b.g("freeChapOverride") === "number" ? b.g("freeChapOverride") : null };
   }
   const noPrice = () => `<div class="warn">Pricing scenarios are unavailable: these Rate Keys were not found with numeric values in the Rates table: ${esc((S.pr && S.pr.missing || []).join(", "))}. Airtable's own price is still shown on the Overview.</div>`;
   /* One Vendors line, as in Airtable's Price Walkthrough. Gratuities are bundled and never shown separately (Martha 2026-11-07). */
@@ -318,7 +318,7 @@
   const draftOf = bid => S.drafts[bid];
   const changesOf = b => Object.assign({}, (draftOf(b.id) || { vals: {} }).vals);
   const planOf = b => E.plan(b, changesOf(b), { baseModified: draftOf(b.id) ? draftOf(b.id).base : (b.raw[F.modified] || null) });
-  const bookingWith = (b, fields) => { const raw = Object.assign({}, b.raw, fields); return { id: b.id, raw, g: k => raw[F[k]] }; };
+  const bookingWith = (b, fields) => { const raw = Object.assign({}, b.raw, fields); return { id: b.id, created: b.created, raw, g: k => raw[F[k]] }; };
 
   /* Price before/after from the mirror, customer-facing lines only (never cost or margin). */
   function impact(b, p) {
