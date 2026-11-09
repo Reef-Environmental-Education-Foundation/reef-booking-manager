@@ -16,9 +16,9 @@
 .btn.alt{background:#fff;color:var(--navy);border:1px solid var(--navy)}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .diff td{vertical-align:top}.diff .bf{color:var(--red);text-decoration:line-through}.diff .af{color:var(--green);font-weight:600}
-textarea{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px}
 </style></head>
 <body>
+<div id="modeBanner" class="mb mb-sandbox" role="status"></div>
 <div id="gate">
   <h1>REEF Booking Program Manager</h1>
   <p class="lead">Internal staff workspace. Enter your own Airtable personal access token to load live bookings. It is kept in this browser tab only, is sent only to Airtable, and is never saved to the site.</p>
@@ -40,7 +40,11 @@ textarea{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border
   <div class="layout"><nav class="side" id="nav"></nav><main id="main"></main></div>
 </div>
 <aside class="drawer" id="drawer"></aside>
+<dialog id="liveDlg" class="dlg dlg-live"></dialog>
+<dialog id="confirmDlg" class="dlg dlg-live"></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
 <script src="js/config.js"></script>
+<script src="js/mode.js"></script>
 <script src="js/adapter-airtable.js"></script>
 <script src="js/pricing.js"></script>
 <script src="js/edits.js"></script>

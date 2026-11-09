@@ -94,13 +94,15 @@
     /* Single-record refresh (used by the edit planner to detect that someone else changed it). */
     async getBooking(id) { const r = await call("POST", "/" + C.BASE_ID + "/" + C.T.bookings + "/listRecords", { filterByFormula: "RECORD_ID()='" + id + "'", returnFieldsByFieldId: true, fields: Object.values(C.F), pageSize: 1 }); return r.records[0]; },
 
-    /* WRITE PATH. Exists so the interface is real, but is blocked by the switches in config.js and by edits.js. */
+    /* WRITE PATH. Only ReefEdits.commit calls these. Blocked by WRITES_ENABLED and, as defense in depth, unless the app is in Live mode. */
     async _patch(tableId, recordId, fields) {
       if (!C.WRITES_ENABLED) throw new Error("Writes are disabled in this build (dry-run only).");
+      if (!(window.ReefMode && window.ReefMode.isLive())) throw new Error("Not in Live mode: nothing is saved from Sandbox.");
       return call("PATCH", "/" + C.BASE_ID + "/" + tableId + "/" + recordId, { fields, typecast: false });
     },
     async _create(tableId, fields) {
       if (!C.WRITES_ENABLED) throw new Error("Writes are disabled in this build (dry-run only).");
+      if (!(window.ReefMode && window.ReefMode.isLive())) throw new Error("Not in Live mode: nothing is saved from Sandbox.");
       return call("POST", "/" + C.BASE_ID + "/" + tableId, { records: [{ fields }], typecast: false });
     }
   };
