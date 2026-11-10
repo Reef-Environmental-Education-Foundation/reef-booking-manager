@@ -45,6 +45,9 @@ window.REEF_CONFIG = {
     netIncome: "fldmphOpOVTHeFPQg", totalCost: "fld4vLRzFATowbHrj", margin: "flddLDxroBRy7u8QT", marginPct: "fld94akrbIWxHO7BG", marginSummary: "flde1ZvY9q1ObSj32",
     staffLabor: "fldG6X9RuncoEOxLJ", campusCost: "fldRE70HVMHNN0qrv", directExp: "fldpVbeYJH0uKQyJz", mileage: "fldL0gmXlWKc5VjHs", materialsActual: "fldWRPejeeIBbmtlK",
     manualVendorEst: "fldhDQFHEsjfF4nV1",
+    // Budget & Margin panel (read-only display of Airtable results)
+    revenue: "fldB9EhBsiS4HEwDc", staffHours: "fldP4hf2P1m1DOv6Y", deliveryHrs: "fldSIfs05BUkvaCtz", hoursOverride: "fldswEPSb8Ju2iIsu", campusHours: "fldfqkjrTQnHC4BGf",
+    mealsRev: "fldcWcnawJWcXVcaL", mealsCost: "fldyG2j53bTHydu9c", mealsMargin: "fldjnRfqLzo8dz7eG", combinedMargin: "fldvZeOcYz1Xplauw",
     // history / comparison
     histTotal: "flds3eGxiIvwHHwUr", priorSigned: "fldNUJoxvEriosLIe", priorSource: "flddsUiIOSxO3AQkt", prevQuoted: "fldZxhnQtXGJ9FvWt", chgPct: "fldgDQqFpLhW0fear", chgAmt: "fldrazfP3IKw6mFVR",
     // contract
@@ -60,7 +63,7 @@ window.REEF_CONFIG = {
   },
   /* Fields that show REEF's internal cost or margin. A scoped token can still read these.
      Hiding them in the page is a courtesy for the "Staff view", NOT security.  */
-  INTERNAL_KEYS: ["netIncome","totalCost","margin","marginPct","marginSummary","staffLabor","campusCost","directExp","mileage","materialsActual","manualVendorEst"],
+  INTERNAL_KEYS: ["revenue","staffHours","deliveryHrs","hoursOverride","campusHours","mealsRev","mealsCost","mealsMargin","combinedMargin","netIncome","totalCost","margin","marginPct","marginSummary","staffLabor","campusCost","directExp","mileage","materialsActual","manualVendorEst"],
 
   /* Inputs the Airtable guardrail automation watches (wflxS2mTwBFYpj5kC). Editing any while Approved to Share is ON
      un-approves, bumps the Proposal Version and alerts Martha in Slack. Read from the live automation 2026-11-03. */
