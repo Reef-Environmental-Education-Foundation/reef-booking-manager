@@ -42,7 +42,7 @@
   }
 
   /* ---------- shell ---------- */
-  const TABS = [["overview", "Overview", "📋"], ["budget", "Budget & Pricing", "💲"], ["vendors", "Vendor Options", "⚓"], ["program", "Program & Itinerary", "🗓"], ["comms", "Communications", "✉"], ["ready", "Get Ready", "✔"], ["contract", "Contracts & Payments", "📝"], ["edit", "Edit", "✎"]];
+  const TABS = [["overview", "Overview", "📋"], ["budget", "Budget & Pricing", "💲"], ["margin", "Budget & Margin", "📊"], ["vendors", "Vendor Options", "⚓"], ["program", "Program & Itinerary", "🗓"], ["comms", "Communications", "✉"], ["ready", "Get Ready", "✔"], ["contract", "Contracts & Payments", "📝"], ["edit", "Edit", "✎"]];
   function go(view, bid, tab) { S.view = view; if (bid) { if (S.bid !== bid) { S.wi = null; } S.bid = bid; } if (tab) S.tab = tab; render(); window.scrollTo(0, 0); }
   window.REEF_UI = { go, setQ: v => { S.q = v; render(true); }, setFilter: v => { S.filter = v; render(); }, refresh: () => load(true), setAuto: v => { S.auto = !!v; schedule(); } };
 
@@ -118,7 +118,7 @@
   /* ---------- Booking workspace ---------- */
   function booking() {
     const b = cur(); if (!b) return list();
-    const fn = { overview, budget, vendors, program, comms, ready, contract, edit }[S.tab] || overview;
+    const fn = { overview, budget, margin: marginTab, vendors, program, comms, ready, contract, edit }[S.tab] || overview;
     const fl = flags(b);
     return `<h2>${esc(b.g("name"))}</h2><p class="lead">${esc(b.g("org") || "")} · ${chip("plan", txt(b.g("status")) || "—")} · <a class="lnk" target="_blank" rel="noopener" href="${atUrl(C.T.bookings, b.id)}">Open in Airtable</a></p>
       ${fl.map(f => `<div class="warn">${esc(f[1])}</div>`).join("")}${fn(b)}`;
@@ -174,6 +174,9 @@
         <div class="${matches ? "banner g" : "banner y"}"><div><strong>${matches ? "Mirror matches Airtable for this booking" : "Mirror out of date, use Airtable's figure (differs by " + money2(diff) + ")"}</strong>${matches ? "The scenario below uses a copy of Airtable's formulas that reproduces the stored total exactly." : (cur0.supported ? "" : "Not modeled here: " + cur0.unsupported.join(", ") + ". ") + "Use Airtable's figure. Discounts, tax, a discovery pricing model or a custom input may not be modeled here. Scenario deltas are shown relative to the mirror, not the stored price."}</div></div>
         <div class="grid g4" id="wi">${[["students", "Students"], ["chaps", "Chaperones"], ["days", "Full program days"], ["sessions", "Campus sessions"], ["trips", "Boat trips"], ["buses", "Buses"]].map(k => `<label class="ctl">${k[1]}<input type="number" min="0" data-k="${k[0]}" value="${base[k[0]]}"></label>`).join("")}</div>
         <div id="wiOut" class="mt"></div><p class="note">Nothing here is saved. It does not change Airtable or what the school sees.</p></div>`;
+  }
+  function marginTab(b) {
+    return window.ReefBudgetMargin.html({ bookings: S.bookings, cur: b, role: S.role, esc, money, txt, testPrefix: C.TEST_PREFIX, rerender: () => render() });
   }
   function wireBudget() {
     const b = cur(), base = inputsOf(b), baseCalc = P.calc(base, {});
