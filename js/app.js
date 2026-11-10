@@ -14,7 +14,7 @@
   const chip = (k, t) => `<span class="chip c-${k}">${esc(t)}</span>`;
   const atUrl = (tbl, rec) => `https://airtable.com/${C.BASE_ID}/${tbl}/${rec}`;
 
-  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, edit: {}, plan: null, caps: null };
+  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, drafts: {}, result: {}, recent: [], saving: false, savedAt: 0, caps: null };
 
   /* ---------- model ---------- */
   function build(data) {
@@ -23,7 +23,7 @@
       chg = by(data.changes, X.changes.booking), itn = by(data.itin, X.itin.booking), ver = by(data.versions || [], X.versions.booking), vl = by(data.vlines || [], X.vlines.booking);
     S.bookings = data.bookings.map(r => {
       const raw = r.fields;
-      return { id: r.id, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [], versions: ver[r.id] || [], vlines: vl[r.id] || [] };
+      return { id: r.id, created: r.createdTime || null, raw, g: k => raw[F[k]], schedule: sch[r.id] || [], comms: com[r.id] || [], checklist: chk[r.id] || [], changes: chg[r.id] || [], itin: itn[r.id] || [], versions: ver[r.id] || [], vlines: vl[r.id] || [] };
     });
     S.bookings.sort((a, b) => String(a.g("arrival") || "9999").localeCompare(String(b.g("arrival") || "9999")));
   }
@@ -42,16 +42,15 @@
   }
 
   /* ---------- shell ---------- */
-  const TABS = [["overview", "Overview", "📋"], ["budget", "Budget & Pricing", "💲"], ["vendors", "Vendor Options", "⚓"], ["program", "Program & Itinerary", "🗓"], ["comms", "Communications", "✉"], ["ready", "Get Ready", "✔"], ["contract", "Contracts & Payments", "📝"], ["edit", "Edit (preview)", "✎"]];
-  function go(view, bid, tab) { S.view = view; if (bid) { if (S.bid !== bid) { S.wi = null; S.edit = {}; S.plan = null; } S.bid = bid; } if (tab) S.tab = tab; render(); window.scrollTo(0, 0); }
+  const TABS = [["overview", "Overview", "📋"], ["budget", "Budget & Pricing", "💲"], ["vendors", "Vendor Options", "⚓"], ["program", "Program & Itinerary", "🗓"], ["comms", "Communications", "✉"], ["ready", "Get Ready", "✔"], ["contract", "Contracts & Payments", "📝"], ["edit", "Edit", "✎"]];
+  function go(view, bid, tab) { S.view = view; if (bid) { if (S.bid !== bid) { S.wi = null; } S.bid = bid; } if (tab) S.tab = tab; render(); window.scrollTo(0, 0); }
   window.REEF_UI = { go, setQ: v => { S.q = v; render(true); }, setFilter: v => { S.filter = v; render(); }, refresh: () => load(true), setAuto: v => { S.auto = !!v; schedule(); } };
 
   function statusbar() {
     const c = S.caps || {};
     $("statusbar").innerHTML = `<span>${chip("live", "LIVE DATA")} <span id="loadedAt">Last loaded at ${esc(new Date(S.data.loadedAt).toLocaleTimeString())}</span>${S.loadErr ? " <b>(refresh failed: " + esc(S.loadErr) + ")</b>" : ""}</span>
       <span><button class="btn alt" id="sbRefresh" onclick="REEF_UI.refresh()">Refresh from Airtable</button> <label><input type="checkbox" id="autoRef" ${S.auto ? "checked" : ""} onchange="REEF_UI.setAuto(this.checked)"> Auto-refresh every 5 min</label></span>
-      <span>Token: ${c.canRead === false ? "<b>cannot read</b>" : "read ok"}, ${c.canWrite ? "<b>has write scope (the app still will not write)</b>" : "read-only"}</span>
-      <span>Editing: <b>OFF</b> (dry-run preview only)</span>
+      <span>Token: ${c.canRead === false ? "<b>cannot read</b>" : "read ok"}, ${c.canWrite ? "<b>has write scope</b>" : "read-only"}</span>
       <span>Cost/margin hiding is a display setting, not security: a token can read everything in the base.</span>`;
     $("who").textContent = c.user ? "Signed in with " + c.user : "";
   }
@@ -142,7 +141,7 @@
   /* Budget & pricing */
   function inputsOf(b) {
     const people = (b.g("students") || 0) + (b.g("chaps") || 0), aboard = b.g("aboard") || people + (b.g("teamTotal") || 0);
-    return { students: b.g("students") || 0, chaps: b.g("chaps") || 0, staff: Math.max(0, aboard - people) || (b.g("teamTotal") || 0), days: b.g("fullDays") || 0, arrDays: b.g("arrDepDays") || 0, sessions: b.g("sessions") || 0, trips: b.g("boatTrips") || 0, buses: b.g("buses") || 0, discountPct: b.g("discount") || 0, upliftPct: b.g("upliftOverride") == null ? null : b.g("upliftOverride"), addVendor: b.g("addVendor") || 0, materials: b.g("materialsFee") || 0, manualVendor: typeof b.g("manualVendorEst") === "number" ? b.g("manualVendorEst") : null, acts: txt(b.g("activities")) || "", model: txt(b.g("pricingModel")) || "", status: txt(b.g("status")) || "", arrival: b.g("arrival"), type: txt(b.g("type")) || "", freeChapOverride: typeof b.g("freeChapOverride") === "number" ? b.g("freeChapOverride") : null };
+    return { students: b.g("students") || 0, chaps: b.g("chaps") || 0, staff: Math.max(0, aboard - people) || (b.g("teamTotal") || 0), days: b.g("fullDays") || 0, arrDays: b.g("arrDepDays") || 0, sessions: b.g("sessions") || 0, trips: b.g("boatTrips") || 0, buses: b.g("buses") || 0, discountPct: b.g("discount") || 0, upliftPct: b.g("upliftOverride") == null ? null : b.g("upliftOverride"), addVendor: b.g("addVendor") || 0, materials: b.g("materialsFee") || 0, manualVendor: typeof b.g("manualVendorEst") === "number" ? b.g("manualVendorEst") : null, acts: txt(b.g("activities")) || "", model: txt(b.g("pricingModel")) || "", status: txt(b.g("status")) || "", arrival: b.g("arrival"), type: txt(b.g("type")) || "", created: b.created || null, freeChapOverride: typeof b.g("freeChapOverride") === "number" ? b.g("freeChapOverride") : null };
   }
   const noPrice = () => `<div class="warn">Pricing scenarios are unavailable: these Rate Keys were not found with numeric values in the Rates table: ${esc((S.pr && S.pr.missing || []).join(", "))}. Airtable's own price is still shown on the Overview.</div>`;
   /* One Vendors line, as in Airtable's Price Walkthrough. Gratuities are bundled and never shown separately (Martha 2026-11-07). */
@@ -313,29 +312,194 @@
     return `<table><tr><th>Version</th><th class="num">Total</th><th class="num">Students</th><th>Arrival</th><th>Published</th><th></th></tr>${rows.map(r => `<tr><td>v${esc(r[XV.version])}</td><td class="num">${money(r[XV.total])}</td><td class="num">${esc(r[XV.students] ?? "—")}</td><td>${esc(fmtD(r[XV.arrival]))}</td><td>${esc(fmtD(r[XV.at]))}</td><td>${acc != null && acc === r[XV.version] ? chip("live", "Accepted") : ""}</td></tr>`).join("")}</table>`;
   }
 
-  /* Edit preview (dry-run) */
+  /* ---------- Edit tab: Sandbox (check price, never saves) and Live (review, confirm, save) ---------- */
+  const M = window.ReefMode;
+  const origStr = (b, k) => b.raw[F[k]] == null ? "" : String(b.raw[F[k]]);
+  const draftOf = bid => S.drafts[bid];
+  const changesOf = b => Object.assign({}, (draftOf(b.id) || { vals: {} }).vals);
+  const planOf = b => E.plan(b, changesOf(b), { baseModified: draftOf(b.id) ? draftOf(b.id).base : (b.raw[F.modified] || null) });
+  const bookingWith = (b, fields) => { const raw = Object.assign({}, b.raw, fields); return { id: b.id, created: b.created, raw, g: k => raw[F[k]] }; };
+
+  /* Price before/after from the mirror, customer-facing lines only (never cost or margin). */
+  function impact(b, p) {
+    if (!P.isReady()) return { available: false, expectedTotal: null };
+    const i0 = inputsOf(b), i1 = inputsOf(bookingWith(b, p.fields)); i1.staff = i0.staff;   // stored Aboard is a formula: keep the same non-student headcount
+    const v = { vessels: P.R.vessels }, c0 = P.calc(i0, v), c1 = P.calc(i1, v), stored = b.g("total");
+    const matches = c0.supported && typeof stored === "number" && Math.abs(c0.total - stored) < 0.005;
+    const L = c => [["Program fees", c.prog], ["Supplies", c.sup], ["Campus facility fee", c.camp], ["Pennekamp entrance & boat", c.penn], ["Vendors, incl. crew gratuities and additional vendor costs", c.vendorsLine], ["Uplift", c.upl], ["Discount", c.disc ? -c.disc : 0]];
+    const l0 = L(c0), l1 = L(c1), notes = [];
+    if (p.headcountChanged && c1.departures !== c0.departures) notes.push("Boat departures change from " + c0.departures + " to " + c1.departures + " (capacity " + c1.cap + " per vessel, " + c1.aboard + " aboard).");
+    if (p.headcountChanged && c1.departures > 0 && c1.waves > 1) notes.push("With " + c1.vessels + " vessel" + (c1.vessels === 1 ? "" : "s") + " available, " + c1.departures + " departures need " + c1.waves + " boat windows.");
+    if (p.headcountChanged && !c1.supported) notes.push("The calculator does not model: " + c1.unsupported.join(", ") + ".");
+    if (p.headcountChanged && c1.incomplete.length) notes.push("Missing for the calculator: " + c1.incomplete.join(", ") + ".");
+    if (p.datesChanged) notes.push("Changing dates can change the number of program days. This price assumes the day counts stay the same; Airtable's recalculated total is the real number.");
+    return { available: true, matches, stored, before: c0, after: c1, rows: l0.map((r, n) => [r[0], r[1], l1[n][1]]), notes, expectedTotal: c1.total, perBefore: c0.paid ? c0.total / c0.paid : null, perAfter: c1.paid ? c1.total / c1.paid : null };
+  }
+  const delta = d => Math.abs(d) < 0.005 ? "no change" : (d > 0 ? "+" : "-") + money(Math.abs(d));
+  function priceHtml(imp) {
+    if (!imp.available) return '<div class="note">Price check unavailable: the Rates table constants are not loaded. Airtable still recalculates the real price.</div>';
+    const row = r => `<tr><td>${esc(r[0])}</td><td class="num">${money(r[1])}</td><td class="num">${money(r[2])}</td><td class="num ${r[2] - r[1] > 0.004 ? "delta-up" : r[2] - r[1] < -0.004 ? "delta-dn" : ""}">${delta(r[2] - r[1])}</td></tr>`;
+    return `${imp.matches ? "" : `<div class="warnred" role="alert">The calculator does not match Airtable for this booking, so the new price below may be off. Airtable's recalculated total is the real number.</div>`}
+      <table class="pricecmp"><caption class="note">Price the school sees (calculator estimate)</caption><tr><th>Line</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr>
+      ${imp.rows.filter(r => r[1] || r[2]).map(row).join("")}
+      <tr class="tot"><td>Total package price</td><td class="num">${money(imp.before.total)}</td><td class="num">${money(imp.after.total)}</td><td class="num">${delta(imp.after.total - imp.before.total)}</td></tr>
+      ${imp.perBefore != null ? `<tr><td class="note">Per paid space</td><td class="num note">${money2(imp.perBefore)}</td><td class="num note">${money2(imp.perAfter)}</td><td class="num note">${delta(imp.perAfter - imp.perBefore)}</td></tr>` : ""}</table>
+      <div class="note">Sales tax is calculated by Airtable and is not part of this comparison.</div>${imp.notes.map(n => `<div class="warn">${esc(n)}</div>`).join("")}`;
+  }
+  const diffHtml = p => `<table class="diff"><tr><th>Field</th><th>Now</th><th>Would become</th></tr>${p.diff.map(d => `<tr><td>${esc(d.label)}${d.watched ? " ⚠" : ""}</td><td class="bf">${esc(show(d.before))}</td><td class="af">${esc(show(d.after))}</td></tr>`).join("")}</table>`;
+  const show = v => v === null || v === undefined || v === "" ? "(blank)" : String(v);
+
+  function ctl(b, k, vals) {
+    const sp = C.EDITABLE[k], o = origStr(b, k), v = vals[k] !== undefined ? vals[k] : o, ch = v !== o, id = "e_" + k;
+    const inp = sp.long ? `<textarea id="${id}" rows="3" data-e="${k}">\n${esc(v)}</textarea>` : `<input id="${id}" data-e="${k}" type="${sp.type === "date" ? "date" : "text"}"${sp.type === "int" ? ' inputmode="numeric"' : ""} value="${esc(v)}">`;
+    return `<div class="ctl${ch ? " chg" : ""}" data-c="${k}"><label for="${id}">${esc(sp.label)}${sp.watched ? " ⚠" : ""}${sp.customerFacing ? " (can appear on school pages)" : ""}</label>${inp}<span class="chgtag"${ch ? "" : " hidden"}>changed, not saved</span><span class="ferr" id="err_${k}" role="alert"></span></div>`;
+  }
+  function resultHtml(bid) {
+    const r = S.result[bid]; if (!r) return "";
+    const f = x => x == null ? "—" : money2(x), lg = r.res.logOk ? "" : `<div class="warnred" role="alert"><strong>Saved to Airtable, but the log entry failed.</strong> Error: ${esc(r.res.logError)}<br>Copy this text and paste it into the Communications Log by hand:<textarea readonly rows="6" id="logText">${esc(r.res.log.summary + "\n" + r.res.log.details)}</textarea><button class="btn alt" type="button" id="copyLog">Copy log text</button> <span id="copied" class="note" role="status"></span></div>`;
+    if (!r.v) return `<div class="card"><h3>Saved ${chip("ok", "SAVED")}</h3>${lg}<div class="note" role="status">Checking Airtable's recalculated total…</div></div>`;
+    const v = r.v, pr = r.p;
+    let tot;
+    if (v.readError && !v.rec) tot = `<div class="warn">Saved, but Airtable could not be re-read to verify (${esc(v.readError)}). Press Refresh from Airtable.</div>`;
+    else if (v.expectedTotal == null) tot = `<div class="warn">The calculator could not predict a price for this change. Airtable's recalculated total is ${f(v.airtableTotal)}.</div>`;
+    else tot = `<table><tr><td>Airtable's recalculated total</td><td class="num">${f(v.airtableTotal)}</td></tr><tr><td>Calculator's expected total</td><td class="num">${f(v.expectedTotal)}</td></tr><tr class="tot"><td>Difference</td><td class="num">${v.diff == null ? "—" : money2(v.diff)}</td></tr></table>
+      ${v.match ? '<div class="note">✓ Airtable and the calculator agree.</div>' : `<div class="warnred" role="alert">Airtable's total differs from the calculator by ${v.diff == null ? "an unknown amount" : money2(Math.abs(v.diff))}. Airtable is correct; tell Martha so the calculator can be fixed.</div>`}`;
+    const watch = pr.approved && pr.touchesWatched ? `<div class="${v.predictedMatch ? "note" : "warn"}" role="status">Predicted: Approved to Share ${pr.predicted.approved ? "on" : "off"}, Proposal Version ${pr.predicted.propVer}. Observed in Airtable: Approved to Share ${v.observed.approved ? "on" : "off"}, Proposal Version ${v.observed.propVer == null ? "—" : v.observed.propVer}. ${v.predictedMatch ? "✓ As predicted." : "These do not match what was predicted. Check the booking in Airtable and tell Martha."}</div>` : "";
+    return `<div class="card" id="resultCard"><h3>Saved ${chip("ok", "SAVED")}</h3>${lg}${tot}${watch}<div class="note">Checked ${v.attempts} time${v.attempts === 1 ? "" : "s"}. Nothing was sent to the school; publishing is a separate step.</div></div>`;
+  }
+  const recentHtml = () => !S.recent.length ? "" : `<div class="card"><h3>Recent changes this session</h3><div class="note">Kept in this tab only; gone when you close it. Airtable's Communications Log has the permanent record.</div><table><tr><th>When</th><th>Booking</th><th>Change</th><th>Reason</th></tr>${S.recent.map(r => `<tr><td>${esc(r.at.toLocaleTimeString())}</td><td>${esc(r.name)}</td><td>${r.rows.map(d => `${esc(d.label)}: ${esc(show(d.before))} -&gt; ${esc(show(d.after))}`).join("<br>")}</td><td>${esc(r.reason)}</td></tr>`).join("")}</table></div>`;
+
   function edit(b) {
-    const ks = Object.keys(C.EDITABLE), appr = b.g("approved");
-    return `<div class="card"><h3>Edit preview ${chip("proto", "DRY RUN")}</h3>
-      <div class="banner b"><div><strong>Nothing is saved from this screen.</strong>It shows what a change would do, checks it, and shows the approval impact. Real saving stays off until the permission, validation and change-tracking checks pass on test records.</div></div>
-      ${appr ? '<div class="warn">This booking is Approved to Share. Fields marked ⚠ would un-approve it.</div>' : '<div class="note">Working draft: editing does not trigger approval resets.</div>'}
-      <div class="grid g3">${ks.map(k => `<label class="ctl">${esc(C.EDITABLE[k].label)}${C.EDITABLE[k].watched ? " ⚠" : ""}<input data-e="${k}" value="${esc(b.raw[F[k]] == null ? "" : b.raw[F[k]])}"></label>`).join("")}</div>
-      <p><button class="btn" id="prev">Preview changes</button></p><div id="planOut"></div></div>
-      ${appr ? `<div class="card"><h3>Start a new draft ${chip("plan", "PLANNED")}</h3><p class="small">To revise this approved booking without surprise resets: un-approve once on purpose, bump the Proposal Version from v${esc(b.g("propVer"))} to v${esc((b.g("propVer") || 0) + 1)}, edit freely, then approve once when ready. The school's live page stays up until you republish. This is not enabled yet; today, un-check Approved to Share in Airtable first.</p></div>` : ""}`;
+    const appr = b.g("approved"), live = M.isLive(), d = draftOf(b.id), vals = d ? d.vals : {}, stale = d && d.base !== (b.raw[F.modified] || null), av = M.availability();
+    const groups = Object.keys(C.EDIT_GROUPS).map(g => `<fieldset class="grp"><legend>${esc(C.EDIT_GROUPS[g])}</legend><div class="grid g3">${Object.keys(C.EDITABLE).filter(k => C.EDITABLE[k].group === g).map(k => ctl(b, k, vals)).join("")}</div></fieldset>`).join("");
+    return `<div class="card"><h3>Edit booking ${live ? chip("fix", "LIVE") : chip("plan", "SANDBOX")}</h3>
+      <div class="banner ${live ? "r" : "b"}"><div><strong>${live ? "Live: saving goes to Airtable." : "Sandbox: nothing is saved."}</strong>${live ? "Review change opens a confirmation box showing exactly what will change and what happens next. Nothing is sent to a school." : "Check price shows what a change would do to the price and the approval. " + (av.ok ? "Use Switch to Live in the top bar to save for real." : esc(av.reason) + ".")}</div></div>
+      ${appr ? '<div class="warn">This booking is Approved to Share. Fields marked ⚠ would un-approve it.</div>' : '<div class="note">Working draft: editing does not trigger approval resets. ⚠ marks fields the approval guardrail watches.</div>'}
+      ${stale ? '<div class="warnred" role="alert">This booking was changed in Airtable after you started typing. Saving is refused until you discard your typing and re-apply the change.</div>' : ""}
+      ${groups}
+      <p class="note" id="unsavedNote"${d ? "" : " hidden"}>Typed values stay in the form but are <b>not saved</b> until you save live.</p>
+      <p><button class="btn${live ? " live" : ""}" id="prev" type="button"${live && !av.ok ? " disabled" : ""}>${live ? "Review change" : "Check price (test only)"}</button> <button class="btn alt" id="resetEdit" type="button"${d ? "" : " hidden"}>Discard typed changes</button></p>
+      <div id="planOut"></div><div class="note">Activity swaps (changing which activities a booking has) are coming later.</div></div>
+      <div id="saveResult">${resultHtml(b.id)}</div>
+      ${appr ? `<div class="card"><h3>Start a new draft ${chip("plan", "PLANNED")}</h3><p class="small">To revise this approved booking without surprise resets: un-approve once on purpose, bump the Proposal Version from v${esc(b.g("propVer"))} to v${esc((b.g("propVer") || 0) + 1)}, edit freely, then approve once when ready. The school's live page stays up until you republish. This is not enabled yet; today, un-check Approved to Share in Airtable first.</p></div>` : ""}
+      <div id="recent">${recentHtml()}</div>`;
+  }
+  /* keep typed values, "changed" tags and inline errors in step without re-rendering the form */
+  function syncFields(b) {
+    const p = planOf(b), vals = changesOf(b);
+    document.querySelectorAll("#main [data-c]").forEach(w => { const k = w.dataset.c, ch = vals[k] !== undefined; w.classList.toggle("chg", ch); w.querySelector(".chgtag").hidden = !ch; w.querySelector(".ferr").textContent = p.errors[k] || ""; const i = w.querySelector("[data-e]"); i.setAttribute("aria-invalid", p.errors[k] ? "true" : "false"); });
+    const un = $("unsavedNote"), rs = $("resetEdit"); if (un) un.hidden = !draftOf(b.id); if (rs) rs.hidden = !draftOf(b.id);
   }
   function wireEdit() {
     const b = cur();
+    document.querySelectorAll("#main [data-e]").forEach(e => e.oninput = () => {
+      const k = e.dataset.e; let d = draftOf(b.id);
+      if (e.value === origStr(b, k)) { if (d) delete d.vals[k]; } else { d = S.drafts[b.id] = d || { base: b.raw[F.modified] || null, vals: {} }; d.vals[k] = e.value; }
+      if (d && !Object.keys(d.vals).length) delete S.drafts[b.id];
+      syncFields(b);
+    });
+    syncFields(b);
+    $("resetEdit").onclick = () => { delete S.drafts[b.id]; render(); };
     $("prev").onclick = () => {
-      const ch = {}; document.querySelectorAll("[data-e]").forEach(e => { const k = e.dataset.e, orig = b.raw[F[k]] == null ? "" : String(b.raw[F[k]]); if (e.value !== orig) ch[k] = e.value; });
-      const p = E.plan(b, ch);
-      $("planOut").innerHTML = !Object.keys(ch).length ? '<div class="note">No changes entered.</div>' : `
-        ${Object.keys(p.errors).map(k => `<div class="warn">${esc((C.EDITABLE[k] || {}).label || k)}: ${esc(p.errors[k])}</div>`).join("")}
-        ${p.diff.length ? `<table class="diff"><tr><th>Field</th><th>Now</th><th>Would become</th></tr>${p.diff.map(d => `<tr><td>${esc(d.label)}${d.watched ? " ⚠" : ""}</td><td class="bf">${esc(d.before == null ? "(blank)" : d.before)}</td><td class="af">${esc(d.after == null ? "(blank)" : d.after)}</td></tr>`).join("")}</table>` : ""}
-        ${p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}
-        <div class="note mt">Change log that would be written: <i>${esc(p.logEntry.summary)}</i>. Concurrency check: the record must be unchanged since ${esc(p.baseModified || "load")}.</div>
-        <p><button class="btn" disabled title="${esc(p.writeBlockedBy || "")}">Save to Airtable</button> <span class="note">${esc(p.writeBlockedBy || "")}${p.isTestRecord ? "" : " Real bookings stay read-only even after writes are enabled until test records pass."}</span></p>`;
+      const ch = changesOf(b); if (!Object.keys(ch).length) { $("planOut").innerHTML = '<div class="note" role="status">No changes entered.</div>'; return; }
+      const p = planOf(b), errs = Object.keys(p.errors).map(k => `<div class="warn" role="alert">${esc((C.EDITABLE[k] || {}).label || k)}: ${esc(p.errors[k])}</div>`).join("");
+      if (!M.isLive()) {
+        const imp = p.diff.length && !Object.keys(p.errors).length ? impact(b, p) : null;
+        $("planOut").innerHTML = `${errs}${p.diff.length ? diffHtml(p) : ""}${p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}${imp ? priceHtml(imp) : ""}
+          <div class="note mt" role="status"><b>Sandbox: nothing was saved.</b> This is only what the change would do.</div>`;
+        return;
+      }
+      if (!p.ok) { $("planOut").innerHTML = errs || '<div class="note" role="status">No changes entered.</div>'; return; }
+      if (p.writeBlockedBy) { $("planOut").innerHTML = `<div class="warnred" role="alert">${esc(p.writeBlockedBy)}.</div>`; return; }
+      $("planOut").innerHTML = ""; openConfirm(b, p, impact(b, p));
     };
   }
+
+  /* ---------- confirmation box (Live only) ---------- */
+  function openConfirm(b, p, imp) {
+    const dlg = $("confirmDlg"), nm = esc(b.g("name"));
+    dlg.innerHTML = `<div class="dlg-body"><h3 id="cfTitle">Review live change</h3><p class="lead">${nm}</p>
+      <h4>What is changing</h4><ul class="chg-list">${p.diff.map(d => `<li><b>${esc(d.label)}</b>: ${esc(show(d.before))} -&gt; ${esc(show(d.after))}</li>`).join("")}</ul>
+      <h4>Price before and after</h4>${priceHtml(imp)}
+      <h4>What happens next</h4>${p.warnings.length ? p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("") : '<div class="note">No approval or schedule effects expected. It saves to Airtable and is logged in the Communications Log.</div>'}
+      <label class="ctl" for="cfReason"><b>Reason for this change (required, at least ${E.MIN_REASON} characters)</b></label><textarea id="cfReason" rows="2" placeholder="e.g. School emailed: 3 more students" aria-describedby="cfCount"></textarea><div class="note" id="cfCount">0 characters (${E.MIN_REASON} more needed)</div>
+      ${p.ack.needed ? `<label class="chk"><input type="checkbox" id="cfAck"> ${esc(p.ack.label)}</label>` : ""}
+      <div id="cfErr" class="warnred" role="alert" hidden></div></div>
+      <div class="dlg-foot"><button class="btn alt" type="button" id="cfCancel">Cancel</button><button class="btn live" type="button" id="cfSave" disabled>Save live change</button></div>`;
+    dlg.setAttribute("aria-labelledby", "cfTitle");
+    const reason = $("cfReason"), ack = $("cfAck"), save = $("cfSave");
+    const ready = () => { const n = reason.value.trim().length; $("cfCount").textContent = n >= E.MIN_REASON ? n + " characters" : n + " characters (" + (E.MIN_REASON - n) + " more needed)"; save.disabled = S.saving || n < E.MIN_REASON || (p.ack.needed && !ack.checked); };
+    reason.oninput = ready; if (ack) ack.onchange = ready;
+    $("cfCancel").onclick = () => dlg.close();
+    dlg.oncancel = e => { if (S.saving) e.preventDefault(); };
+    save.onclick = async () => {
+      if (S.saving || save.disabled) return;
+      S.saving = true; save.disabled = true; save.textContent = "Saving..."; $("cfCancel").disabled = true; $("cfErr").hidden = true;
+      try { await doSave(b, p, imp, reason.value.trim()); dlg.close(); }
+      catch (e) { S.saving = false; $("cfErr").textContent = "Not saved: " + e.message; $("cfErr").hidden = false; save.textContent = "Save live change"; $("cfCancel").disabled = false; ready(); }
+    };
+    dlg.showModal(); reason.focus();
+  }
+
+  /* Save, then verify instead of assuming: re-read, wait for Airtable's formulas and the guardrail, compare with what was predicted. */
+  async function doSave(b, p, imp, reason) {
+    const bid = b.id, name = b.g("name"), rows = p.diff.map(d => ({ label: d.label, before: d.before, after: d.after }));
+    const res = await E.commit(b, p, { mode: "live", confirmed: true, reason, user: (S.caps || {}).user });   // throws before anything is sent unless every gate passes
+    S.savedAt = Date.now(); S.saving = false;
+    delete S.drafts[bid]; S.recent.unshift({ name, rows, reason, at: new Date() }); S.result[bid] = { res, p, v: null };
+    try { replaceBooking(await D.getBooking(bid)); } catch (e) { /* the verify loop below reads again */ }
+    if (S.view === "booking" && S.bid === bid && S.tab === "edit" && !draftOf(bid)) render(); else paintResult(bid);
+    E.verifyAfterSave({ read: () => D.getBooking(bid), expectedTotal: imp.expectedTotal, predicted: p.predicted, onRead: replaceBooking })
+      .then(v => { S.result[bid] = { res, p, v }; S.savedAt = Date.now(); paintResult(bid); })
+      .catch(e => { S.result[bid] = { res, p, v: { rec: null, readError: e.message, attempts: 0, expectedTotal: null, observed: {}, predicted: p.predicted } }; paintResult(bid); });
+    return res;
+  }
+  function paintResult(bid) {
+    if (!(S.view === "booking" && S.bid === bid && S.tab === "edit")) return;
+    const r = $("saveResult"), rc = $("recent"); if (r) r.innerHTML = resultHtml(bid); if (rc) rc.innerHTML = recentHtml();
+  }
+  /* replace one booking in app state with a fresh read; never touches typed drafts */
+  function replaceBooking(rec) {
+    if (!rec) return; const old = S.bookings.find(x => x.id === rec.id); if (!old) return;
+    const raw = rec.fields; old.raw = raw; old.g = k => raw[F[k]];
+    if (S.data) { const i = S.data.bookings.findIndex(x => x.id === rec.id); if (i >= 0) S.data.bookings[i] = rec; }
+  }
+  document.addEventListener("click", ev => {
+    const t = ev.target; if (!t || t.id !== "copyLog") return; const ta = $("logText");
+    const done = ok => { const c = $("copied"); if (c) c.textContent = ok ? "Copied." : "Select the text and copy it by hand."; };
+    try { navigator.clipboard.writeText(ta.value).then(() => done(true), () => { ta.select(); done(document.execCommand("copy")); }); } catch (e) { ta.select(); try { done(document.execCommand("copy")); } catch (e2) { done(false); } }
+  });
+
+  /* ---------- mode banner, Live dialog, toast ---------- */
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { t.hidden = true; }, 8000); }
+  const clock = ms => { const s = Math.ceil(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  let shownMode = null;
+  function renderBanner(s) {
+    const el = $("modeBanner"), live = s.mode === "live";
+    if (shownMode === s.mode && !s.full) { const c = $("mbCount"); if (c) c.textContent = s.warn ? "Returns to Sandbox in " + clock(s.remainingMs) : ""; return; }
+    shownMode = s.mode; document.body.classList.toggle("live", live);
+    if (live) el.innerHTML = `<span class="mb-icon" aria-hidden="true">⚠</span><span class="mb-text"><b>LIVE</b> - changes save to Airtable.</span><span class="mb-count" id="mbCount" aria-hidden="true">${s.warn ? "Returns to Sandbox in " + clock(s.remainingMs) : ""}</span><button type="button" class="mb-btn" id="mbBack">Back to Sandbox</button>`;
+    else { const a = M.availability(); el.innerHTML = `<span class="mb-icon" aria-hidden="true">🧪</span><span class="mb-text"><b>SANDBOX</b> - nothing is saved. Changes only show what the price would be.</span><span class="mb-why" id="mbWhy">${a.ok ? "" : esc(a.reason)}</span><button type="button" class="mb-btn" id="mbLive" ${a.ok ? "" : 'disabled aria-describedby="mbWhy"'}>Switch to Live</button>`; }
+    el.className = "mb " + (live ? "mb-live" : "mb-sandbox");
+    const bk = $("mbBack"), lv = $("mbLive");
+    if (bk) bk.onclick = () => M.toSandbox("Back in Sandbox.");
+    if (lv) lv.onclick = openLiveDialog;
+  }
+  function openLiveDialog() {
+    const d = $("liveDlg"); d.innerHTML = `<div class="dlg-body"><h3 id="lvTitle">Switch to Live?</h3><p>Saves go straight to Airtable and are logged under your name. Nothing is sent to a school.</p></div><div class="dlg-foot"><button class="btn alt" type="button" id="lvCancel">Cancel</button><button class="btn live" type="button" id="lvGo">Switch to Live</button></div>`;
+    d.setAttribute("aria-labelledby", "lvTitle"); $("lvCancel").onclick = () => d.close();
+    $("lvGo").onclick = () => { const r = M.requestLive(); d.close(); if (!r.ok) toast(r.reason + "."); };
+    d.showModal(); $("lvCancel").focus();
+  }
+  M.onChange(s => {
+    const wasLive = shownMode === "live"; renderBanner(s);
+    if (wasLive && s.mode === "sandbox") {
+      const cd = $("confirmDlg"); if (cd.open && !S.saving) cd.close();
+      if (s.reason) toast(s.reason);
+      if (S.data) render();
+    } else if (!wasLive && s.mode === "live" && S.data) render();
+  });
+  ["click", "keydown", "input"].forEach(ev => document.addEventListener(ev, () => M.touch(), true));
 
   /* New booking / EPO */
   function newBooking() {
@@ -350,8 +514,9 @@
   function help() {
     $("drawer").innerHTML = `<button class="btn alt" onclick="document.getElementById('drawer').classList.remove('open')">Close</button><h3 class="mt">Help</h3>
       <p><b>What this is.</b> One workspace for bookings, pricing, vendors, program and next steps, reading live from Airtable.</p>
-      <p><b>What works now.</b> Search and open every booking, see full details, the price breakdown and history, scenarios (nothing saved), vendors and rates, schedule, communications, checklist, contract dates, and a dry-run edit preview.</p>
-      <p><b>What does not work yet.</b> Saving changes, creating bookings, saving vendor quotes. These stay off until verified on test records.</p>
+      <p><b>What works now.</b> Search and open every booking, see full details, the price breakdown and history, scenarios (nothing saved), vendors and rates, schedule, communications, checklist, contract dates, and the Edit tab.</p>
+      <p><b>Sandbox and Live.</b> The app always opens in <b>Sandbox</b> (blue bar): nothing is saved, Check price only shows what a change would do. <b>Live</b> (red bar) saves to Airtable, but only after you press Review change, read the confirmation box and give a reason. Live switches itself off after 15 minutes idle. Editable: student and chaperone counts, arrival and departure dates, notes and follow-up. Prices, vendors, sessions, buses, boat trips and contacts stay read-only. Every live save is logged in the Communications Log under your name. Nothing is ever sent to a school from here; publishing is a separate step.</p>
+      <p><b>What does not work yet.</b> Live saving is off until Martha switches it on (the Live button says so). Creating bookings, activity swaps and saving vendor quotes are not built.</p>
       <p><b>Your token.</b> Stays in this browser tab. Disconnect clears it. If you see a 401 or 403, the token is missing the <i>data.records:read</i> scope or this base.</p>
       <p><b>Staff view vs Pricing view.</b> A display setting. Anyone with a token can read the whole base. Real separation needs separate tokens/accounts or a server.</p>
       <p><b>Troubleshooting.</b> 401: token wrong or expired. 403/404: no access to the base. 429: Airtable is rate limiting; wait a moment and Refresh.</p>`;
@@ -363,15 +528,20 @@
   function schedule() { clearInterval(timer); if (S.auto && S.data) timer = setInterval(() => load(true), window.REEF_REFRESH_MS || 300000); }
   /* silent=true: re-read without leaving the page, keeping the selected booking/tab and the in-memory token. */
   async function load(silent) {
-    silent = silent === true && !!S.data;
+    silent = silent === true && !!S.data; const started = Date.now();
     if (!silent) { $("gate").hidden = true; $("app").hidden = false; $("main").innerHTML = '<div class="card"><h3>Loading bookings…</h3><div id="prog" class="note"></div></div>'; }
+    if (silent && S.saving) return;   // never refresh while a live save is in flight
     try {
-      S.caps = await D.verify();
+      try { S.caps = await D.verify(); } catch (e) { M.toSandbox("Back in Sandbox: the token could not be verified."); throw e; }
+      renderBanner(Object.assign(M.state(), { full: true }));   // the switch depends on what the token can do
       const data = await D.loadAll(silent ? null : (n, c) => { const p = $("prog"); if (p) p.textContent = n + ": " + c + " records"; });
+      if (silent && (S.saving || S.savedAt >= started)) return;   // a save finished while this read was in flight: it may be stale, the next refresh will be fine
       S.data = data; S.loadErr = null; S.pr = P.load(S.data.rates); build(S.data); $("roleSel").value = S.role;
-      if (silent) { const y = window.scrollY, ae = document.activeElement; if (ae && ae.matches && ae.matches("#main input, #main select")) statusbar(); else { render(); window.scrollTo(0, y); } } else render();
+      if (silent) { const y = window.scrollY, ae = document.activeElement; if (ae && ae.matches && ae.matches("#main input, #main select, #main textarea")) statusbar(); else { render(); window.scrollTo(0, y); } } else render();
       schedule();
-    } catch (e) { if (silent) { S.loadErr = e.message; statusbar(); } else fail(e); }
+    } catch (e) {
+      if (silent) { S.loadErr = e.message; statusbar(); } else fail(e);
+    }
   }
   function fail(e) {
     $("app").hidden = true; $("gate").hidden = false;
@@ -380,7 +550,8 @@
   $("go").onclick = () => { const t = $("tok").value.trim(); if (!t) { $("err").textContent = "Paste your token first."; return; } $("err").textContent = ""; D.setToken(t, $("rem").checked); $("tok").value = ""; load(); };
   $("tok").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
   $("refresh").onclick = () => load(true); $("help").onclick = help;
-  $("disc").onclick = () => { clearInterval(timer); D.clear(); S.data = null; S.bookings = []; S.bid = null; $("app").hidden = true; $("gate").hidden = false; };
+  $("disc").onclick = () => { clearInterval(timer); M.toSandbox("Back in Sandbox: disconnected."); D.clear(); S.data = null; S.bookings = []; S.bid = null; S.drafts = {}; S.result = {}; S.recent = []; $("app").hidden = true; $("gate").hidden = false; };
   $("roleSel").onchange = e => { S.role = e.target.value; render(); };
+  renderBanner(Object.assign(M.state(), { full: true }));
   if (D.restore()) load();
 })();

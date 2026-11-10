@@ -2,7 +2,7 @@
    Contains Airtable IDs only (structure, not data). No tokens, no booking data.
    Airtable base/table/field IDs are identifiers, not secrets: they are useless without a token. */
 window.REEF_CONFIG = {
-  VERSION: "0.3.0-readonly",
+  VERSION: "0.5.0-live-edit",
   BASE_ID: "app3FIECuG8iQr7kY",
   T: {
     bookings: "tbl9Jb9UVSYLQ1Puc", vendors: "tblu7zzoyc0UdHwz4", rates: "tbltdE9P1BnOoPlbL",
@@ -15,6 +15,9 @@ window.REEF_CONFIG = {
   WRITES_ENABLED: false,          // master switch. false = dry-run only, no network write ever leaves the page
   WRITES_TEST_RECORDS_ONLY: true, // even when enabled, only records whose Booking Name starts with "ZZZ"
   TEST_PREFIX: "ZZZ",
+  LIVE_IDLE_MS: 15 * 60 * 1000,   // Live mode drops back to Sandbox after this long with no click, key or input
+  LIVE_WARN_MS: 2 * 60 * 1000,    // countdown shows in the banner for the last part of that window
+  COMMS_WHAT: "Other",            // Communications Log "What" option used for app edits. Must be an option that already exists; never create options
 
   /* Bookings fields (by field ID, so renames in Airtable do not break the app). */
   F: {
@@ -36,7 +39,7 @@ window.REEF_CONFIG = {
     // price lines (customer-facing)
     progFees: "fldi1aqXISuwqHxut", campusFee: "fldiBD7ZgK1EjUcKy", supplies: "fldbsULEFAXaeZPGN", subtotal: "fld4e4y9GbpsJwjnX",
     uplift: "flduKwWTkcpOzSC6b", discountAmt: "fld3Xhk3MoR8nMget", tax: "fldcoouD1zMQcr66o", total: "fldnuoaZqg9uSnWOd", perPaid: "fldJoWJwTgCwAgyWs",
-    vendorAuto: "fld1NehIhFWZc1Ufw", pennTotal: "fldDExjAVD7sQ3DzH", gratTotal: "fldA5gzNm3Rsh33Jo", pricingModel: "fldElB66WNS33nn9t",
+    vendorAuto: "fld1NehIhFWZc1Ufw", pennTotal: "fldDExjAVD7sQ3DzH", pennVehicles: "fldm17xpAeJp5ibeP", pennEntrance: "fldBcQtlVDCOtEwak", gratTotal: "fldA5gzNm3Rsh33Jo", pricingModel: "fldElB66WNS33nn9t",
     freeChap: "fldWpVEwDKeGkUrcu", billTravelers: "fldH6wc6g8FjSAyhM", reach: "fldewJJhOnqPykADX", teamTotal: "fldwt9q3sL9bAAHla", aboard: "fldcngDArA2pgUjRy",
     // internal (cost / margin)
     netIncome: "fldmphOpOVTHeFPQg", totalCost: "fld4vLRzFATowbHrj", margin: "flddLDxroBRy7u8QT", marginPct: "fld94akrbIWxHO7BG", marginSummary: "flde1ZvY9q1ObSj32",
@@ -63,21 +66,19 @@ window.REEF_CONFIG = {
      un-approves, bumps the Proposal Version and alerts Martha in Slack. Read from the live automation 2026-11-03. */
   GUARDRAIL_WATCHED: ["students","chaps","arrival","departure","activities","itinLinks","sessions","fullDays","arrDepDays","buses","boatTrips","location","grade","discount","upliftOverride","freeChapOverride","manualVendorEst","addVendor","taxExempt","materialsFee"],
 
-  /* First safe edit candidates (Phase 3, dry-run only today). type drives validation. */
+  /* v1 editable fields (Live and Sandbox). type drives validation, group drives layout, watched = the guardrail watches it,
+     customerFacing = the text can appear on the school's pages after the next publish. Price inputs, vendor overrides, sessions, buses,
+     boat trips and contact fields are deliberately NOT here. Never add a formula, link or lookup field. */
   EDITABLE: {
-    contact:   {label: "Primary contact name", type: "text", watched: false},
-    email:     {label: "Contact email", type: "email", watched: false},
-    phone:     {label: "Contact phone", type: "text", watched: false},
-    nextAction:{label: "Next action", type: "text", watched: false},
-    followUp:  {label: "Follow-up date", type: "date", watched: false},
-    internalNotes:{label: "Internal notes", type: "text", watched: false},
-    customerNotes:{label: "Customer-facing notes", type: "text", watched: false},
-    students:  {label: "# Students", type: "int", min: 0, max: 400, watched: true},
-    chaps:     {label: "# Chaperones", type: "int", min: 0, max: 100, watched: true},
-    arrival:   {label: "Arrival date", type: "date", watched: true},
-    departure: {label: "Departure date", type: "date", watched: true},
-    sessions:  {label: "Campus sessions", type: "int", min: 0, max: 40, watched: true},
-    buses:     {label: "# Buses (Pennekamp)", type: "int", min: 0, max: 20, watched: true},
-    boatTrips: {label: "# Boat snorkel/dive trips", type: "int", min: 0, max: 6, watched: true}
-  }
+    students:  {label: "# Students", type: "int", min: 0, max: 400, required: true, watched: true, group: "counts"},
+    chaps:     {label: "# Chaperones", type: "int", min: 0, max: 100, required: true, watched: true, group: "counts"},
+    arrival:   {label: "Arrival date", type: "date", watched: true, group: "dates"},
+    departure: {label: "Departure date", type: "date", watched: true, group: "dates"},
+    internalNotes:{label: "Internal notes", type: "text", long: true, watched: false, group: "notes"},
+    customerNotes:{label: "Customer-facing notes", type: "text", long: true, watched: false, customerFacing: true, group: "notes"},
+    special:   {label: "Special requests", type: "text", long: true, watched: false, customerFacing: true, group: "notes"},
+    nextAction:{label: "Next action", type: "text", long: true, watched: false, group: "notes"},
+    followUp:  {label: "Follow-up date", type: "date", watched: false, group: "notes"}
+  },
+  EDIT_GROUPS: {counts: "Counts", dates: "Dates", notes: "Notes and follow-up"}
 };

@@ -110,3 +110,45 @@ summary{cursor:pointer;font-weight:600;color:var(--navy)}
 .mt{margin-top:10px}
 a.lnk{color:var(--teal);cursor:pointer;text-decoration:underline}
 @media print{nav.side,.proto-bar,header.top .hbtn{display:none}}
+
+/* ---------- Sandbox / Live mode (v0.5) ----------
+   Contrast (white text): Sandbox #0b4a85 = 9.0:1, Live #a31a12 = 7.7:1. Meaning is carried by an icon and words, not colour alone,
+   and Live also puts a thick red border across the top of the whole page. */
+.mb{position:sticky;top:0;z-index:60;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 16px;color:#fff;font-size:14px}
+.mb-sandbox{background:#0b4a85}
+.mb-live{background:#a31a12}
+.mb-text b{letter-spacing:.5px;font-size:15px}
+.mb-icon{font-size:18px}
+.mb-why,.mb-count{font-size:12.5px;margin-left:auto}
+.mb-count{font-weight:700}
+.mb-btn{background:#fff;color:#1d2b36;border:2px solid #fff;border-radius:8px;padding:5px 12px;font-weight:600}
+.mb-btn[disabled]{background:transparent;color:#fff;border-color:rgba(255,255,255,.7);opacity:.85;cursor:not-allowed}
+.mb-why+.mb-btn,.mb-count+.mb-btn{margin-left:0}
+.mb-text+.mb-btn{margin-left:auto}
+body.live{border-top:8px solid #a31a12}
+body.live .mb-live{margin-top:-8px;padding-top:16px}
+.btn.live{background:#a31a12}
+.btn:focus-visible,.mb-btn:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid #ffbf47;outline-offset:2px}
+textarea{width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px}
+fieldset.grp{border:1px solid var(--line);border-radius:10px;margin:0 0 12px;padding:8px 12px 12px}
+fieldset.grp legend{font-weight:700;color:var(--navy);padding:0 6px}
+.ctl label{font-weight:600;color:var(--ink)}
+.ctl textarea{border-radius:6px;padding:6px 8px}
+.ctl.chg textarea{border-color:var(--amber);background:var(--amber-l)}
+.chgtag{color:#7a4a00;font-weight:600;font-size:12px}
+.ferr{color:var(--red);font-size:12.5px;font-weight:600;min-height:0}
+.warnred{background:var(--red-l);border:1px solid var(--red);color:#7d1510;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px;font-weight:600}
+.pricecmp td.num,.pricecmp th.num{white-space:nowrap}
+dialog.dlg{border:0;border-radius:14px;padding:0;width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 24px);box-shadow:0 12px 50px rgba(0,0,0,.4);color:var(--ink)}
+dialog.dlg[open]{display:flex;flex-direction:column}
+dialog.dlg::backdrop{background:rgba(10,20,30,.6)}
+.dlg-live{border-top:8px solid #a31a12}
+.dlg-body{padding:16px 18px;overflow:auto;flex:1}
+.dlg-body h4{margin:14px 0 6px;color:var(--navy)}
+.dlg-foot{display:flex;gap:10px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--line);background:#fafcfd}
+.chg-list{margin:0;padding-left:20px;overflow-wrap:anywhere}
+.chk{display:flex;gap:8px;align-items:flex-start;margin:10px 0;font-weight:600}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#1d2b36;color:#fff;padding:10px 16px;border-radius:10px;z-index:90;max-width:calc(100vw - 32px);box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.toast[hidden]{display:none}
+td,th{overflow-wrap:anywhere}
+@media(max-width:600px){.mb-text+.mb-btn,.mb-why,.mb-count{margin-left:0}.dlg-foot .btn{flex:1}}
