@@ -2,7 +2,7 @@
    Contains Airtable IDs only (structure, not data). No tokens, no booking data.
    Airtable base/table/field IDs are identifiers, not secrets: they are useless without a token. */
 window.REEF_CONFIG = {
-  VERSION: "0.5.0-live-edit",
+  VERSION: "0.5.0-readonly",
   BASE_ID: "app3FIECuG8iQr7kY",
   T: {
     bookings: "tbl9Jb9UVSYLQ1Puc", vendors: "tblu7zzoyc0UdHwz4", rates: "tbltdE9P1BnOoPlbL",
@@ -17,6 +17,7 @@ window.REEF_CONFIG = {
   TEST_PREFIX: "ZZZ",
   LIVE_IDLE_MS: 15 * 60 * 1000,   // Live mode drops back to Sandbox after this long with no click, key or input
   LIVE_WARN_MS: 2 * 60 * 1000,    // countdown shows in the banner for the last part of that window
+  PIPELINE_NO_REPLY_DAYS: 45,     // Pipeline "Needs a look": a sent proposal with no reply recorded is flagged when the program is this many days out or fewer
   COMMS_WHAT: "Other",            // Communications Log "What" option used for app edits. Must be an option that already exists; never create options
 
   /* Bookings fields (by field ID, so renames in Airtable do not break the app). */
