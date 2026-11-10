@@ -54,6 +54,7 @@ const srv = http.createServer((q, r) => { const p = path.join(root, q.url === "/
   ok(/Checks pass/.test(t), "reconciliation checks pass on consistent data");
   await pg.click("nav button:has-text('Budget & Pricing')"); const tp = await main();
   ok(!/Mirror out of date/.test(tp) && /\$11,437/.test(tp), "Budget & Pricing: activities resolve to names, so the price mirror matches Airtable (no 'Mirror out of date' warning)");
+  ok(/Revenue less direct expenses/.test(tp) && /\$6,275/.test(tp) && !/Net income/.test(tp), "Internal cost card shows revenue less direct expenses ($6,275), not the legacy Net Income field");
   await pg.click("nav button:has-text('Budget & Margin')"); t = await main();
   const diff = await pg.$$eval("tr.net td.dlt", e => e.map(x => x.textContent.trim()));
   ok(diff[0] === "−$378" && /2\.5 pts/.test(diff[1]), "difference column: 3-day minus 4-day margin = −$378 and −2.5 pts (got " + diff.join(" | ") + ")");
