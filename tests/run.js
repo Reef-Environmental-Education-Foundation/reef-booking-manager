@@ -109,7 +109,7 @@ async function unitTests() {
   ok(JSON.stringify(Object.keys(pt.body.fields).sort()) === JSON.stringify([h.F.students, h.F.internalNotes].sort()) && pt.body.typecast === false, "commit: PATCH sends only the changed fields (unchanged chaperones omitted) with typecast false");
   const lf = lg.body.records[0].fields, X = h.D().FX.comms;
   ok(lf[X.what] === "Other" && lf[X.summary] === "App edit: # Students, Internal notes" && lf[X.booking][0] === bk.id && lg.body.typecast === false, "change log: Communications Log row, What = \"Other\", Summary lists the field labels, booking linked");
-  ok(/Students: 90 -> 95/.test(lf[X.details]) && /Internal notes: \(blank\) -> call Pat/.test(lf[X.details]) && /Reason: School emailed: 5 more students/.test(lf[X.details]) && /Edited by: rose@example\.org via Booking Manager v0\.5\.0-live-edit/.test(lf[X.details]) && /Proposal Version: 3 before, unchanged expected/.test(lf[X.details]), "change log: Details has before -> after, the reason, the editor's email and the version");
+  ok(/Students: 90 -> 95/.test(lf[X.details]) && /Internal notes: \(blank\) -> call Pat/.test(lf[X.details]) && /Reason: School emailed: 5 more students/.test(lf[X.details]) && /Edited by: rose@example\.org via Booking Manager v0\.5\.0-readonly/.test(lf[X.details]) && /Proposal Version: 3 before, unchanged expected/.test(lf[X.details]), "change log: Details has before -> after, the reason, the editor's email and the version");
   ok(!(X.by in lf) && !Object.values(lf).some(v => v && v.id), "change log: the By (collaborator) field is never written");
   // ---- partial failures ----
   h = harness({ WRITES_ENABLED: true }); bk = h.set("ZZZ Partial"); await h.goLive(); h.st.failLog = true; pl = h.E().plan(bk, { students: "95" });
@@ -140,6 +140,64 @@ async function unitTests() {
   m1 = mkRead([771.75, 771.75, 955.5]); vr = await E0.verifyAfterSave({ read: m1.read, sleep: m1.sleep, expectedTotal: 955.5 }); ok(vr.match && vr.attempts === 3 && m1.delays.join() === "1500,2000,2000", "post-save: retries at 2s intervals (up to 2 more) and stops as soon as the totals match");
   m1 = mkRead([771.75]); vr = await E0.verifyAfterSave({ read: m1.read, sleep: m1.sleep, expectedTotal: 955.5, predicted: { approved: true, propVer: 9 } }); ok(!vr.match && vr.attempts === 3 && vr.diff === -183.75 && vr.airtableTotal === 771.75 && vr.predictedMatch === false, "post-save: when totals never agree it stops after 3 reads and reports the difference and the prediction mismatch");
   // ---- confirmation-box wording lives in app.js; checked in the browser below ----
+}
+
+
+/* ======================= Pipeline screen: synthetic bookings, one per stage plus edge cases ======================= */
+async function pipelineTests(br) {
+  const dt = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10), pf = C.TEST_PREFIX;
+  const mkb = (i, org, prog, o) => mk("recPIPE" + String(i).padStart(4, "0"), Object.assign({ [f.name]: org + " - " + prog, [f.org]: org, [f.arrival]: dt(200 + i), [f.students]: 20, [f.chaps]: 3, [f.reach]: 23, [f.total]: 1000, [f.totalCost]: 77777, [f.margin]: 88888, [f.marginPct]: 12.3456 }, o));
+  const B = [
+    mkb(1, "Alpha School", "2-Day", { [f.status]: "Quoting", [f.approved]: true, [f.total]: 1000 }),
+    mkb(2, "Bravo School", "1-Day", { [f.total]: 2000 }),                                               // blank status = drafting
+    mkb(3, "Delta School", "2-Day", { [f.status]: "Quoting", [f.total]: 3000 }),
+    mkb(4, "Delta School", "4-Day", { [f.status]: "Quoting", [f.total]: 5000 }),
+    mkb(5, "Echo School", "3-Day", { [f.status]: "Proposal Sent", [f.total]: 4000 }),                   // flag: Proposal Sent Date blank
+    mkb(6, "Foxtrot School", "1-Day", { [f.status]: "Proposal Sent", [f.proposalSent]: dt(-5), [f.response]: "Not Yet Responded", [f.arrival]: dt(20), [f.total]: 500 }), // flag: 20 days out, no reply
+    mkb(7, "Golf School", "2-Day", { [f.status]: "Proposal Sent", [f.proposalSent]: dt(-5), [f.response]: "Wants Changes", [f.total]: 700 }),   // flag: school replied
+    mkb(8, "Hotel School", "2-Day", { [f.status]: "Verbal Yes", [f.total]: 800 }),
+    mkb(9, "India School", "2-Day", { [f.status]: "Contracted", [f.total]: 900 }),
+    mkb(10, "Juliet School", "2-Day", { [f.status]: "Contracted", [f.agreementStatus]: "Sent", [f.total]: 1100 }),
+    mkb(11, "Kilo School", "2-Day", { [f.status]: "Confirmed", [f.agreementStatus]: "Sent", [f.total]: 1200 }),            // Confirmed beats contract Sent; flag: payment blank
+    mkb(12, "Lima School", "2-Day", { [f.status]: "Contracted", [f.agreementStatus]: "Signed", [f.paymentStatus]: "Deposit Paid", [f.total]: 1300 }),
+    mkb(13, "Mike School", "2-Day", { [f.status]: "Completed" }),
+    mkb(14, "Nancy School", "2-Day", { [f.status]: "Cancelled" }),
+    mkb(15, pf + " Booking", "x", { [f.org]: pf + " Org", [f.status]: "Quoting" }),
+    mkb(16, "November School", "x", { [f.org]: pf + " Other", [f.status]: "Proposal Sent" })];
+  B.forEach(b => { if (b.id === "recPIPE0016") b.fields[f.name] = "November School - x"; });
+  const tb = {}; Object.keys(T).forEach(k => tb[T[k]] = []); tb[T.bookings] = B;
+  const ctx = await br.newContext({ viewport: { width: 1280, height: 900 } }), pg = await ctx.newPage(), errs = []; pg.on("pageerror", e => errs.push(e.message));
+  await pg.route("https://api.airtable.com/**", async route => { const rq = route.request(), u = rq.url();
+    if (rq.method() !== "POST" && !/whoami/.test(u)) return route.fulfill({ status: 405, body: "{}" });
+    if (/meta\/whoami/.test(u)) return route.fulfill({ json: { id: "usrX", email: "t@example.org", scopes: ["data.records:read"] } });
+    const m = u.match(/\/v0\/app\w+\/(tbl\w+)\/listRecords/); if (m) return route.fulfill({ json: { records: tb[m[1]] || [] } }); route.fulfill({ status: 404, body: "{}" }); });
+  await pg.goto("http://localhost:" + srv.address().port + "/"); await pg.fill("#tok", "pat_TEST123"); await pg.click("#go"); await pg.waitForSelector("#main h2");
+  const navs = await pg.$$eval("nav button", bs => bs.map(b => b.textContent.trim())); ok(/Today/.test(navs[0]) && /Pipeline/.test(navs[1]), "pipeline: nav item sits directly under Today");
+  await pg.click("nav button:has-text('Pipeline')"); await pg.waitForSelector(".board");
+  const cnt = await pg.$$eval(".pcol", cs => cs.map(c => [c.querySelector(".cn").textContent, +c.querySelector(".count").textContent, c.querySelector(".val").textContent, c.querySelector(".who").textContent]));
+  ok(JSON.stringify(cnt.map(c => [c[0], c[1]])) === JSON.stringify([["Drafting", 4], ["Proposal sent", 3], ["Said yes", 2], ["Contract sent", 1], ["Signed", 2]]), "pipeline: column counts 4 / 3 / 2 / 1 / 2 " + JSON.stringify(cnt.map(c => c[1])));
+  ok(cnt[0][2] === "$11,000" && cnt[1][2] === "$5,200" && cnt[3][2] === "$1,100" && cnt[4][2] === "$2,500", "pipeline: column dollar totals");
+  ok(cnt.map(c => c[3]).join("|") === "REEF's move|School's move|REEF's move|School's move|Getting ready's move", "pipeline: whose-move labels");
+  ok(await pg.textContent("#pipeFoot") === "2 completed or cancelled, 2 test records", "pipeline: footer counts completed/cancelled and test records (test by name and by organization)");
+  const hd = await pg.textContent("#pipeHead"); ok(hd === "Of 12 active bookings, 3 have proposals out waiting on the school, 1 has a contract out waiting on a signature, and 2 are signed. 2 have said yes and still need a contract sent. 4 are still drafts that nothing has been sent for.", "pipeline: headline sentence " + hd);
+  const colOf = async org => pg.$eval(`.pcard:has-text('${org}')`, e => e.closest(".pcol").dataset.col);
+  ok(await colOf("Kilo") === "5" && await colOf("Juliet") === "4" && await colOf("Bravo") === "1" && await colOf("Hotel") === "3" && await colOf("India") === "3", "pipeline: Confirmed beats contract Sent; blank status is Drafting; Verbal Yes and unsigned Contracted are Said yes");
+  ok((await pg.$$eval(".pcard:has-text('Delta School')", cs => cs.map(c => /one of 2 options/.test(c.textContent)))).join() === "true,true" && !/one of/.test(await pg.textContent(".pcard:has-text('Alpha School')")), "pipeline: two options from one organization say 'one of 2 options'; a single booking does not");
+  const alpha = await pg.textContent(".pcard:has-text('Alpha School')"); ok(/Proposal page live/.test(alpha) && !/Proposal page live/.test(await pg.textContent(".pcard:has-text('Bravo School')")), "pipeline: 'Proposal page live' tag only on Drafting cards with Approved on");
+  ok(/2-Day/.test(alpha) && !/Alpha School - /.test(alpha.replace(/^Alpha School/, "")) && /\$1,000/.test(alpha) && /23 participants/.test(alpha) && /days out/.test(alpha), "pipeline: card shows org, program without the org prefix, arrival, days out, participants, total");
+  const order = await pg.$$eval(".pcol[data-col='1'] .pcard .t", ts => ts.map(t => t.textContent)); ok(order.join() === "Alpha School,Bravo School,Delta School,Delta School", "pipeline: cards sorted by arrival, soonest first");
+  const need = await pg.textContent("#pipeNeed");
+  ok(/Echo School[^]*Proposal Sent Date is blank/.test(need), "flag: Proposal Sent with no Proposal Sent Date");
+  ok(/Golf School[^]*School replied: Wants Changes/.test(need) && !/School replied: Not Yet/.test(need), "flag: school replied (and 'Not Yet Responded' is not a reply)");
+  ok(/Foxtrot School[^]*Program is 20 days out with no reply recorded/.test(need) && !/Echo School[^]*days out with no reply/.test(need.split("Foxtrot")[0]) && !/Golf School[^]*no reply recorded/.test(need.split("Kilo")[0].split("Golf")[1] || ""), "flag: proposal with no reply and the program 45 days out or fewer (Echo is far out, Golf replied: neither gets it)");
+  ok(/Kilo School[^]*Deposit\/Payment Status is blank/.test(need) && !/Lima School/.test(need), "flag: signed booking with a blank Deposit/Payment Status (Lima has one, so no flag)");
+  const flagOrder = await pg.$$eval("#pipeNeed .flagrow a", r => r.map(x => x.textContent)); ok(flagOrder.join() === "Foxtrot School,Echo School,Golf School,Kilo School", "flags: one row per card, soonest program first " + flagOrder);
+  const page = await pg.textContent("#main"); ok(!/77,777|88,888|12\.3|margin|cost/i.test(page) && !/77777|88888/.test(await pg.innerHTML("#main")), "pipeline: no cost or margin figure appears on the screen");
+  ok(!(await pg.textContent("#main")).includes(pf + " Booking") && !/November School/.test(page), "pipeline: test records are not shown as cards");
+  await pg.click(".pcard:has-text('Golf School')"); await pg.waitForFunction(() => /Golf School/.test(document.querySelector("#main h2").textContent)); ok(/Overview/.test(await pg.textContent("nav button.on")), "pipeline: clicking a card opens that booking's workspace");
+  await pg.click("nav button:has-text('Pipeline')"); await pg.setViewportSize({ width: 390, height: 844 });
+  ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "pipeline: no page-level horizontal overflow at 390px (the board scrolls inside itself)");
+  ok(errs.length === 0, "pipeline: no JavaScript errors" + errs.join("|")); await ctx.close();
 }
 
 /* ======================= v0.5 Live editing in the browser: served with writes ENABLED (test copy only), all Airtable calls mocked ======================= */
@@ -410,5 +468,6 @@ async function liveBrowserTests(br) {
   ok(errs.length === 0, "no JavaScript errors" + (errs.length ? ": " + errs.join("|") : ""));
   await pg.click("#disc"); ok(await pg.isVisible("#gate"), "Disconnect returns to the token screen");
   await liveBrowserTests(br);
+  await pipelineTests(br);
   await br.close(); srv.close(); srvLive.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();
