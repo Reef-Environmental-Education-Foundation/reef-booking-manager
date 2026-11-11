@@ -60,6 +60,7 @@
     const b = cur();
     let h = `<h4>Workspace</h4>
       <button class="${S.view === "home" ? "on" : ""}" onclick="REEF_UI.go('home')">🏠 Today</button>
+      <button class="${S.view === "pipeline" ? "on" : ""}" onclick="REEF_UI.go('pipeline')">🧭 Pipeline</button>
       <button class="${S.view === "list" ? "on" : ""}" onclick="REEF_UI.go('list')">📚 All bookings</button>
       <button class="${S.view === "new" ? "on" : ""}" onclick="REEF_UI.go('new')">➕ New booking / EPO inquiry</button>`;
     if (b) {
@@ -71,7 +72,7 @@
   function render(keepFocus) {
     if (!S.data) return; statusbar(); nav();
     const m = $("main");
-    const fn = { home, list, new: newBooking, booking }[S.view] || home;
+    const fn = { home, pipeline, list, new: newBooking, booking }[S.view] || home;
     m.innerHTML = fn();
     if (keepFocus) { const q = $("q"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
     if (S.view === "booking" && S.tab === "budget") wireBudget();
@@ -101,6 +102,11 @@
       <div class="grid g4"><div class="kpi"><div class="n">${act.length}</div><div class="l">Active bookings</div></div><div class="kpi"><div class="n">${awaiting.length}</div><div class="l">Quoted, no accepted version</div></div><div class="kpi"><div class="n">${soon.length}</div><div class="l">Arriving within 60 days</div></div><div class="kpi"><div class="n">${need.length}</div><div class="l">Need attention</div></div></div>
       <h3 class="mt">Needs attention</h3>${need.length ? need.map(card).join("") : '<div class="card note">Nothing flagged.</div>'}
       <h3 class="mt">Next actions on file</h3><div class="card">${next.length ? next.map(b => `<div class="todo"><div class="s s-open">›</div><div><a class="lnk" onclick="REEF_UI.go('booking','${b.id}','overview')">${esc(b.g("org") || b.g("name"))}</a><div class="small">${esc(b.g("nextAction"))}${b.g("followUp") ? " · follow up " + esc(fmtD(b.g("followUp"))) : ""}</div></div></div>`).join("") : '<span class="note">No next actions recorded.</span>'}</div>`;
+  }
+
+  /* ---------- Pipeline (read-only board; see js/pipeline.js) ---------- */
+  function pipeline() {
+    return window.ReefPipeline.html({ bookings: S.bookings, esc, money, txt, fmtD, daysTo, chip, testPrefix: C.TEST_PREFIX, noReplyDays: C.PIPELINE_NO_REPLY_DAYS });
   }
 
   /* ---------- List ---------- */

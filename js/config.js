@@ -15,6 +15,7 @@ window.REEF_CONFIG = {
   WRITES_ENABLED: false,          // master switch. false = dry-run only, no network write ever leaves the page
   WRITES_TEST_RECORDS_ONLY: true, // even when enabled, only records whose Booking Name starts with "ZZZ"
   TEST_PREFIX: "ZZZ",
+  PIPELINE_NO_REPLY_DAYS: 45,     // Pipeline screen: flag a sent proposal with no reply when the program is this many days out or fewer
   LIVE_IDLE_MS: 15 * 60 * 1000,   // Live mode drops back to Sandbox after this long with no click, key or input
   LIVE_WARN_MS: 2 * 60 * 1000,    // countdown shows in the banner for the last part of that window
   COMMS_WHAT: "Other",            // Communications Log "What" option used for app edits. Must be an option that already exists; never create options
