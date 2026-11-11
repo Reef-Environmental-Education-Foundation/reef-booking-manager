@@ -15,6 +15,8 @@ Internal staff workspace for REEF school and group bookings. Static site (HTML/J
 ## Budget & Margin tab (internal, read-only)
 `js/budget-margin.js` renders a Budget & Margin tab (Pricing & costs view only): revenue, hard costs line by line, staff and campus cost, and net dollars and percent, side by side for sibling options (same school, arrival within 3 weeks) plus a "Compare with" picker. It only displays Airtable's own results (Program Revenue, Total Program Cost, Program Margin) and flags any place where the lines do not add up to them. It never writes and never recalculates prices. Staff hours come from the Airtable formula (10 hrs per full day, 5 per arrival/departure day, x1.25 prep, $35/hr). Test: `node tests/budget-margin.js` (synthetic data).
 
+`js/pipeline.js` renders the Pipeline screen (nav: Pipeline, under Today): one read-only board of every open booking in five columns, Drafting, Proposal sent, Said yes, Contract sent, Signed, derived from Status and Agreement/Contract Status. It shows customer-facing totals only (never cost or margin), a "Needs a look" list (blank Proposal Sent Date, a reply recorded, no reply with the program within `PIPELINE_NO_REPLY_DAYS` days, signed with blank payment status), and a footer counting completed/cancelled and test records left off. It never writes. Test: `node tests/pipeline.js` (synthetic data).
+
 ## Sandbox vs Live (v0.5)
 The app opens in **Sandbox** every time (never remembered). A sticky bar on every screen says which mode you are in.
 - **Sandbox (blue)**: "SANDBOX - nothing is saved." The Edit tab's **Check price (test only)** shows what a change would do to the price and the approval. It can never write.
