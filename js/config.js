@@ -18,6 +18,11 @@ window.REEF_CONFIG = {
   PIPELINE_NO_REPLY_DAYS: 45,     // Pipeline screen: flag a sent proposal with no reply when the program is this many days out or fewer
   LIVE_IDLE_MS: 15 * 60 * 1000,   // Live mode drops back to Sandbox after this long with no click, key or input
   LIVE_WARN_MS: 2 * 60 * 1000,    // countdown shows in the banner for the last part of that window
+  CONTRACT: {
+    SIGN_URL: "https://sign.zoho.com/",   // opens Zoho Sign; Rose finds the draft under Documents > Drafts. Replace with a deep link only after one is verified.
+    DRAFT_OWNER_CONFIRMED: false,         // false = the panel warns that the draft may be owned by the Zoho account the automation signs in with (Martha's), not Rose's
+    POLL_MS: 3000, POLL_TIMEOUT_MS: 90000 // after the button, read the booking back this often for up to this long
+  },
   COMMS_WHAT: "Other",            // Communications Log "What" option used for app edits. Must be an option that already exists; never create options
 
   /* Bookings fields (by field ID, so renames in Airtable do not break the app). */
@@ -52,6 +57,7 @@ window.REEF_CONFIG = {
     // history / comparison
     histTotal: "flds3eGxiIvwHHwUr", priorSigned: "fldNUJoxvEriosLIe", priorSource: "flddsUiIOSxO3AQkt", prevQuoted: "fldZxhnQtXGJ9FvWt", chgPct: "fldgDQqFpLhW0fear", chgAmt: "fldrazfP3IKw6mFVR",
     // contract
+    signBox: "fldfwVVDIRHacdqGF", signReqId: "fldUbF8ZZX4oG56xC", signResult: "fldiJy3ZEKdF4DxNI", contractCheck: "fld7yF4U0WJITGzat",   // Zoho Sign draft flow. signBox is the ONLY contract field the app may write (see js/contract.js)
     agreementDate: "fldnuf6ra0xBPdm3E", tier: "fldF9IdukYDM1L9wX", payTier: "fldnoIuLdBo4mkGBn", depositNow: "fldYsdIwIWseizwBE", depositOverride: "fldwBvQiTsRok7F8U",
     depositAmt: "fldBAJ2xLhAaCI5W8", depositDue: "fldk2vug26H75mMeX", pay2Amt: "fldmEsOZHCxTCxCfK", pay2Due: "fldi9v9lFKPTE7VhI",
     minGuarSpaces: "fldUAhz9djYgfBhyI", guarCost: "fldQf9IGWARao85TR", lockDate: "fldKYs0MYV6B6XLhg", rosterDue: "fldnNa5W5RhM7dQWY",

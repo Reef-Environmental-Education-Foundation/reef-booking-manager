@@ -86,6 +86,6 @@ ok(fl({ stage: "signed", status: "Confirmed", payment: "" }).join() === "Deposit
   ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "phone width: no sideways page scroll");
   ok(writes === 0, "read-only: zero write requests to Airtable");
   ok(errs.length === 0, "no page errors" + (errs.length ? ": " + errs.join(" | ") : ""));
-  ok(/WRITES_ENABLED:\s*false/.test(fs.readFileSync(path.join(root, "js/config.js"), "utf8")), "WRITES_ENABLED is still false");
+  { const c = fs.readFileSync(path.join(root, "js/config.js"), "utf8"); ok(/WRITES_TEST_RECORDS_ONLY:\s*true/.test(c) && /WRITES_ENABLED:\s*(true|false)/.test(c), "WRITES_TEST_RECORDS_ONLY is still true and WRITES_ENABLED is a boolean"); }
   await br.close(); srv.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();

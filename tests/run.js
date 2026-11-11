@@ -26,9 +26,9 @@ tbl[T.comms] = [mk("recC1", { fld0yV06EMb364wDo: ["recAAAAAAAAAAAAA1"], fldyfBpg
 tbl[T.checklist] = [mk("recK1", { fldl9U7R5wd51QTCQ: ["recAAAAAAAAAAAAA1"], fld0QmKxGP1qn0S1C: "Roster", fldyIZDGmyfULPD8x: true })];
 tbl["tbluKC2sTvtaypK7W"] = [mk("recV1", { fld9shgPkcovzaeqY: ["recAAAAAAAAAAAAA2"], fldo9lLqOFJTBtgUt: 1, fldoYWMVJkbBK1dFd: 8500, fldxWZsJpLZHTyMCI: 60, fldUBjgPZLoTjDglV: "2027-03-17", fldkBodBHe3GJHsf5: "2026-10-01T12:00:00.000Z" })];
 const log = []; let writeAttempts = 0;
-const serve = liveCfg => http.createServer((q, r) => { const p = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]); fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); r.end(); } else { if (liveCfg && p.endsWith("js/config.js")) d = Buffer.from(String(d).replace("WRITES_ENABLED: false", "WRITES_ENABLED: true")); r.writeHead(200, { "Content-Type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(d); } }); });
+const serve = liveCfg => http.createServer((q, r) => { const p = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]); fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); r.end(); } else { if (p.endsWith("js/config.js")) d = Buffer.from(String(d).replace(/WRITES_ENABLED:\s*(true|false)/, "WRITES_ENABLED: " + !!liveCfg)); r.writeHead(200, { "Content-Type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(d); } }); });
 const srvLive = serve(true);
-const srv = http.createServer((q, r) => { const p = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]); fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); r.end(); } else { r.writeHead(200, { "Content-Type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(d); } }); });
+const srv = serve(false);   // writes-off build: forces WRITES_ENABLED false so the Sandbox/disabled-switch behaviour is still tested now that main ships it true
 let pass = 0, fail = 0; const ok = (c, m) => { c ? pass++ : fail++; console.log((c ? "PASS " : "FAIL ") + m); };
 
 /* ======================= v0.5 Sandbox / Live: unit tests (synthetic data, fetch mocked, no browser) ======================= */
@@ -61,12 +61,12 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
 
 async function unitTests() {
   const cfgText = fs.readFileSync(path.join(root, "js/config.js"), "utf8"), modeText = fs.readFileSync(path.join(root, "js/mode.js"), "utf8");
-  ok(/WRITES_ENABLED:\s*false/.test(cfgText) && /WRITES_TEST_RECORDS_ONLY:\s*true/.test(cfgText), "ships with WRITES_ENABLED false and WRITES_TEST_RECORDS_ONLY true");
+  ok(/WRITES_ENABLED:\s*(true|false)/.test(cfgText) && /WRITES_TEST_RECORDS_ONLY:\s*true/.test(cfgText), "ships with WRITES_ENABLED a boolean and WRITES_TEST_RECORDS_ONLY true");
   ok(!/localStorage|sessionStorage/.test(modeText), "mode is never persisted (mode.js uses no browser storage)");
   ok(contrast("#ffffff", "#0b4a85") >= 4.5 && contrast("#ffffff", "#a31a12") >= 4.5, "banner colours meet WCAG AA contrast (white on blue " + contrast("#ffffff", "#0b4a85").toFixed(1) + ":1, on red " + contrast("#ffffff", "#a31a12").toFixed(1) + ":1)");
   const cssText = fs.readFileSync(path.join(root, "css/app.css"), "utf8"); ok(/#0b4a85/.test(cssText) && /#a31a12/.test(cssText), "banner colours in the stylesheet are the ones contrast-checked");
   // ---- mode ----
-  let h = harness(); ok(h.M().get() === "sandbox" && !h.M().isLive(), "mode: defaults to Sandbox on load");
+  let h = harness({ WRITES_ENABLED: false }); ok(h.M().get() === "sandbox" && !h.M().isLive(), "mode: defaults to Sandbox on load");
   h.set("ZZZ Mode"); h.w.ReefData.setToken("pat_TEST"); await h.D().verify();
   let r = h.M().requestLive(); ok(!r.ok && /not switched on yet/.test(r.reason) && h.M().get() === "sandbox", "mode: Live refused while WRITES_ENABLED is false (reason: not switched on yet)");
   h = harness({ WRITES_ENABLED: true }); h.st.scopes = ["data.records:read"]; h.set("ZZZ Mode"); h.w.ReefData.setToken("pat_TEST"); await h.D().verify();
