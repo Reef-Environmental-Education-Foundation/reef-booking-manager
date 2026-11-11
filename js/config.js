@@ -12,7 +12,7 @@ window.REEF_CONFIG = {
     vlines: "tblkcaDalE4TtQ3FE"                     // Booking Vendor Lines: set to the table ID once Martha approves creating it
   },
   /* ---- WRITE SAFETY SWITCHES (all off). Do not change without Martha's written go-ahead. ---- */
-  WRITES_ENABLED: false,          // master switch. false = dry-run only, no network write ever leaves the page
+  WRITES_ENABLED: true,          // master switch. false = dry-run only, no network write ever leaves the page
   WRITES_TEST_RECORDS_ONLY: true, // even when enabled, only records whose Booking Name starts with "ZZZ"
   TEST_PREFIX: "ZZZ",
   PIPELINE_NO_REPLY_DAYS: 45,     // Pipeline screen: flag a sent proposal with no reply when the program is this many days out or fewer
