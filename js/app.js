@@ -1,6 +1,6 @@
 /* REEF Booking Program Manager: UI. Reads through ReefData only. Contains no booking data. */
 (function () {
-  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits;
+  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits, K = window.ReefContract;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = n => n == null || n === "" || isNaN(n) ? "—" : "$" + Math.round(+n).toLocaleString("en-US");
@@ -14,7 +14,7 @@
   const chip = (k, t) => `<span class="chip c-${k}">${esc(t)}</span>`;
   const atUrl = (tbl, rec) => `https://airtable.com/${C.BASE_ID}/${tbl}/${rec}`;
 
-  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, drafts: {}, result: {}, recent: [], saving: false, savedAt: 0, caps: null };
+  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, drafts: {}, result: {}, recent: [], cd: {}, saving: false, savedAt: 0, caps: null };
 
   /* ---------- model ---------- */
   function build(data) {
@@ -78,6 +78,7 @@
     if (S.view === "booking" && S.tab === "budget") wireBudget();
     if (S.view === "booking" && S.tab === "vendors") wireVendors();
     if (S.view === "booking" && S.tab === "edit") wireEdit();
+    if (S.view === "booking" && S.tab === "contract") wireContract();
   }
 
   /* ---------- Today ---------- */
@@ -288,7 +289,7 @@
   /* Contracts & payments */
   function contract(b) {
     const proj = !b.g("agreementDate"), d1 = b.g("depositDue"), d2 = b.g("pay2Due");
-    return `<div class="card"><h3>Agreement terms ${chip("live", "LIVE")}</h3>
+    return contractPanel(b) + `<div class="card"><h3>Agreement terms ${chip("live", "LIVE")}</h3>
       ${proj ? '<div class="warn"><b>Projected dates.</b> No Agreement Date is entered, so dates that run from signing (deposit, Payment 2, and for later tiers the lock date) are calculated from today and move daily until the Agreement Date is recorded.</div>' : ""}
       ${field("Contract tier", esc(b.g("tier")))}${field("Payment tier (legacy label)", esc(b.g("payTier")))}${field("Agreement date", esc(fmtD(b.g("agreementDate"))))}
       ${field("Agreement deposit (20% unless overridden)", "<b>" + money2(b.g("depositAmt")) + "</b> due " + esc(fmtD(d1)))}${field("Payment 2", b.g("pay2Amt") == null ? "none for this tier" : money2(b.g("pay2Amt")) + " due " + esc(fmtD(d2)))}
@@ -299,6 +300,75 @@
       ${b.g("depositNow") != null ? `<details class="why"><summary>Legacy field</summary><div class="small">Legacy 'Deposit Due Now': ${money(b.g("depositNow"))}. Old flat deposit, kept for reference; the agreement deposit above is the figure to use.</div></details>` : ""}</div>
       <div class="card"><h3>Published versions</h3>${versionsTable(b)}</div>
       <div class="card"><h3>Acceptance</h3>${field("Acceptance status", esc(txt(b.g("acceptance"))))}${field("Accepted proposal version", esc(b.g("acceptedVer") ?? "—"))}${field("Current proposal version", esc(b.g("propVer")))}</div>`;
+  }
+
+
+  /* ---------- Contract draft panel (Zoho Sign). Read-only display plus one guarded button; see js/contract.js ---------- */
+  function contractPanel(b) {
+    const cs = K.state(b), run = S.cd[b.id] || {}, live = M.isLive();
+    const chk = cs.checkOk ? chip("ok", "Contract Check: OK") : `<span class="chip c-fix">${esc(cs.check || "Contract Check: n/a")}</span>`;
+    const stChip = cs.status === "Signed" ? chip("live", "Signed") : cs.status === "Sent" ? `<span class="chip c-chk">Sent</span>` : `<span class="chip">${esc(cs.status)}</span>`;
+    let last = "";
+    if (cs.result.text) {
+      const when = cs.result.at ? " <span class='small'>(" + esc(new Date(cs.result.at).toLocaleString()) + ")</span>" : "";
+      last = `<div class="${cs.outcome === "ok" ? "note" : "warn"}"><b>Latest result from the automation</b>${when}<br>${esc(cs.result.text.length > 700 ? cs.result.text.slice(0, 700) + "..." : cs.result.text)}</div>`;
+    }
+    const owner = C.CONTRACT.DRAFT_OWNER_CONFIRMED ? "" : '<div class="note">The draft is created under the Zoho account the automation signs in with (currently Martha\'s). If you do not see it under your own Documents > Drafts, ask Martha. Not yet confirmed with Rose.</div>';
+    let why = cs.blockedBy || cs.writeBlockedBy || (!live ? "Switch to Live (bar at the top) to use this button." : (!D.capabilities().canWrite ? "Your token cannot write." : ""));
+    if (run.phase === "waiting") why = "Working... the automation is building the draft in Zoho Sign.";
+    const dis = !!(cs.blockedBy || cs.writeBlockedBy || !live || run.phase === "waiting" || S.saving);
+    return `<div class="card" id="cdPanel"><h3>Contract draft (Zoho Sign)</h3>
+      ${field("Contract status", stChip + " " + chk)}
+      ${field("Draft in Zoho Sign", cs.hasDraft ? "<b>Yes</b>, request <code>" + esc(cs.reqId) + "</code> (unsent until you press Send in Zoho Sign)" : "None yet")}
+      ${last}
+      <div class="note">Nothing here sends the contract to the school. The draft stays unsent until Rose reviews it in Zoho Sign and clicks Send. Until it is sent, any change to the booking rebuilds the draft; once sent or signed, the app never touches it and #oxp-bookings is alerted instead.</div>
+      ${owner}
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0 4px"><button class="btn ${live ? "live" : ""}" type="button" id="cdBtn" ${dis ? "disabled" : ""} aria-describedby="cdWhy">${esc(run.phase === "waiting" ? "Working..." : cs.label)}</button>
+      <a class="lnk" id="cdOpen" target="_blank" rel="noopener" href="${esc(C.CONTRACT.SIGN_URL)}">Open Zoho Sign</a></div>
+      <div class="note" id="cdWhy">${esc(why)}</div>
+      <div id="cdResult" role="status">${run.phase === "done" ? contractResultHtml(run) : ""}</div></div>`;
+  }
+  function contractResultHtml(run) {
+    if (run.error) return `<div class="warnred" role="alert">Not requested: ${esc(run.error)}</div>`;
+    const logNote = run.logOk === false ? `<div class="warn">The request went through but the Communications Log row failed (${esc(run.logError)}).</div>` : "";
+    if (run.timedOut) return logNote + '<div class="warn"><b>No answer yet.</b> The request was made, but Airtable has not reported back after 90 seconds. Check #oxp-bookings for the automation\'s message, then reload this page before clicking again.</div>';
+    const s = run.state, cls = s.outcome === "ok" ? "note" : "warnred";
+    return logNote + `<div class="${cls}"><b>${s.outcome === "ok" ? "Done. Unsent draft is ready." : "The automation did not create a draft."}</b><br>${esc(s.result.text)}<br><span class="small">The automation also posted this to #oxp-bookings (tagging Rose and Martha).</span></div>`;
+  }
+  function wireContract() {
+    const b = cur(), btn = $("cdBtn"); if (!b || !btn) return;
+    btn.onclick = () => { if (!btn.disabled) openContractConfirm(b); };
+  }
+  function openContractConfirm(b) {
+    const dlg = $("confirmDlg"), cs = K.state(b), nm = esc(b.g("name"));
+    dlg.innerHTML = `<div class="dlg-body"><h3 id="cfTitle">${esc(cs.label)}?</h3><p class="lead">${nm}</p>
+      <h4>What happens next</h4>
+      <ul class="chg-list"><li>The booking's current details are merged into the Expedition Agreement and saved as an <b>unsent draft</b> in Zoho Sign.</li>
+      ${cs.hasDraft ? "<li><b>The earlier unsent draft is deleted and rebuilt</b> with the latest details.</li>" : ""}
+      <li>#oxp-bookings is notified (tagging Rose and Martha). <b>Nothing is sent to the school.</b> You review the draft in Zoho Sign and click Send yourself.</li></ul>
+      ${cs.hasDraft ? '<label class="chk"><input type="checkbox" id="cfAck"> I understand each click rebuilds the unsent draft</label>' : ""}
+      <div id="cfErr" class="warnred" role="alert" hidden></div></div>
+      <div class="dlg-foot"><button class="btn alt" type="button" id="cfCancel">Cancel</button><button class="btn live" type="button" id="cfSave" ${cs.hasDraft ? "disabled" : ""}>${esc(cs.label)}</button></div>`;
+    const ack = $("cfAck"), go = $("cfSave"); if (ack) ack.onchange = () => { go.disabled = !ack.checked; };
+    $("cfCancel").onclick = () => dlg.close();
+    go.onclick = async () => {
+      if (go.disabled) return; go.disabled = true; $("cfCancel").disabled = true; go.textContent = "Requesting...";
+      try { dlg.close(); await doContract(b); } catch (e) { /* doContract reports on screen */ }
+    };
+    dlg.showModal();
+  }
+  async function doContract(b) {
+    const bid = b.id, paint = () => { if (S.view === "booking" && S.bid === bid && S.tab === "contract") { const el = $("cdPanel"); if (el) { el.outerHTML = contractPanel(cur()); wireContract(); } } };
+    S.cd[bid] = { phase: "waiting" }; paint();
+    let req;
+    try { req = await K.request(b, { confirmed: true, user: (S.caps || {}).user }); }
+    catch (e) { S.cd[bid] = { phase: "done", error: e.message }; paint(); return; }
+    try { replaceBooking(await D.getBooking(bid)); } catch (e) {}
+    S.cd[bid] = { phase: "waiting" }; paint();
+    const w = await K.waitForResult({ read: () => D.getBooking(bid), prior: req.prior, onRead: replaceBooking });
+    S.cd[bid] = { phase: "done", logOk: req.logOk, logError: req.logError, timedOut: w.timedOut, state: w.state };
+    if (w.timedOut) S.cd[bid].state = K.state(cur());
+    paint();
   }
 
   function paymentsReconcile(b) {

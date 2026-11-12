@@ -17,6 +17,14 @@ Internal staff workspace for REEF school and group bookings. Static site (HTML/J
 
 `js/pipeline.js` renders the Pipeline screen (nav: Pipeline, under Today): one read-only board of every open booking in five columns, Drafting, Proposal sent, Said yes, Contract sent, Signed, derived from Status and Agreement/Contract Status. It shows customer-facing totals only (never cost or margin), a "Needs a look" list (blank Proposal Sent Date, a reply recorded, no reply with the program within `PIPELINE_NO_REPLY_DAYS` days, signed with blank payment status), and a footer counting completed/cancelled and test records left off. It never writes. Test: `node tests/pipeline.js` (synthetic data).
 
+## Contract draft panel (Zoho Sign)
+Top of the Contracts & Payments tab. Shows Contract Status, Contract Check, whether an unsent Zoho Sign draft exists (Sign Request ID) and the latest Sign Draft Result. The **Create / Refresh contract draft** button ticks one checkbox, "Create Sign Draft (Rose)" (`F.signBox`), and nothing else; the Airtable automation "Contract Draft - Create on school approval, refresh until sent" builds or rebuilds the **unsent** draft in Zoho Sign, unticks the box, writes the result and posts to #oxp-bookings. The app never calls Zoho, holds no Zoho token and never sends anything; Rose reviews and clicks Send in Zoho Sign.
+- Gates: Live mode, confirmation box, `WRITES_ENABLED`, `WRITES_TEST_RECORDS_ONLY`, write-scoped token. Checked against Airtable's current values at click time.
+- Disabled (with the reason) when Contract Status is Sent or Signed, Contract Check is not OK, the box is already ticked, or the booking is not a ZZZ record while test-only is on.
+- After the click the booking is re-read every `CONTRACT.POLL_MS` for up to `CONTRACT.POLL_TIMEOUT_MS` and the automation's result is shown.
+- `CONTRACT.DRAFT_OWNER_CONFIRMED` stays false until Rose confirms drafts appear under her Zoho Sign account; the panel says so until then. `CONTRACT.SIGN_URL` is the Zoho Sign link.
+- Files: `js/contract.js` (logic, DOM-free), `js/app.js` (panel and dialog), `js/config.js` (field IDs, `CONTRACT`). Tests: `node tests/contract.js`, `node tests/contract-ui.js` (synthetic data).
+
 ## Sandbox vs Live (v0.5)
 The app opens in **Sandbox** every time (never remembered). A sticky bar on every screen says which mode you are in.
 - **Sandbox (blue)**: "SANDBOX - nothing is saved." The Edit tab's **Check price (test only)** shows what a change would do to the price and the approval. It can never write.
