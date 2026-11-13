@@ -50,15 +50,33 @@
     return out;
   }
 
+  /* Vendor picker data: Rates, Vendors and Activities, read-only, only the fields the picker uses. Cached for the session. */
+  const VFIELDS = {
+    rates: ["key", "name", "cat", "vendor", "vendorName", "cur", "num", "unit", "eff", "active", "notes", "status", "avail", "activities"],
+    vendors: ["name", "cat"], activities: ["name", "vendor"]
+  };
+  FX.rates.activities = "fldw9PSxujfzQ7uwi";
+  let vcache = null;
+  async function loadVendorData(force) {
+    if (vcache && !force) return vcache;
+    const ids = (t, ks) => ks.map(k => FX[t][k]);
+    vcache = {
+      rates: await listAll(C.T.rates, ids("rates", VFIELDS.rates)),
+      vendors: await listAll(C.T.vendors, ids("vendors", VFIELDS.vendors)),
+      activities: await listAll(C.T.activities, ids("activities", VFIELDS.activities)), loadedAt: new Date().toISOString()
+    };
+    return vcache;
+  }
+
   const ReefData = {
-    FX,
+    FX, loadVendorData,
     hasToken: () => !!token,
     setToken(t, remember) {
       token = (t || "").trim(); who = null; scopes = [];
       try { if (remember) sessionStorage.setItem("reef_pat", token); else sessionStorage.removeItem("reef_pat"); } catch (e) {}
     },
     restore() { try { const t = sessionStorage.getItem("reef_pat"); if (t) { token = t; return true; } } catch (e) {} return false; },
-    clear() { token = null; who = null; scopes = []; try { sessionStorage.removeItem("reef_pat"); } catch (e) {} },
+    clear() { token = null; who = null; scopes = []; vcache = null; try { sessionStorage.removeItem("reef_pat"); } catch (e) {} },
 
     /* Connection check: who am I, what can this token do, can it read the Bookings table. */
     async verify() {
@@ -88,6 +106,8 @@
         if (!C.T[k]) { rest[k] = []; rest.optionalMissing.push(k); continue; }
         try { rest[k] = await listAll(C.T[k], null, step(k)); } catch (e) { rest[k] = []; rest.optionalMissing.push(k); }
       }
+      // Picker data: restricted fields, refreshed on every load (Rates change when vendors send sheets). A failure must never break the app.
+      try { rest.vdata = await loadVendorData(true); } catch (e) { rest.vdata = null; rest.vdataError = e.message; }
       return Object.assign({ bookings, loadedAt: new Date().toISOString() }, rest);
     },
 
