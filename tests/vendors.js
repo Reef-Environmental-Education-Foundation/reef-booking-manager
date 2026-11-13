@@ -180,7 +180,7 @@ const gate = async (label, re, o) => { o = o || {}; const g = harness(Object.ass
   await gate("a required tick box is missing", /tick box/, { extra: { raw: { [F.approved]: true } }, opts: { acks: [] } });
   await gate("a field outside the allowlist", /allowlist/, { plan: pl => Object.assign({}, pl, { fields: Object.assign({}, pl.fields, { [F.total]: 1 }) }) });
   await gate("a field outside the allowlist (Proposal Version)", /allowlist/, { plan: pl => Object.assign({}, pl, { fields: { [F.propVer]: 9 } }) });
-  await gate("Pricing Rates that are not record IDs", /record IDs/, { plan: pl => Object.assign({}, pl, { fields: { [F.pricingRates]: ["Pirates"] } }) });
+  await gate("Pricing Rates that are not record IDs", /record IDs/, { plan: pl => Object.assign({}, pl, { fields: { [F.pricingRates]: ["not-a-record-id"] } }) });
 }
 let g = harness({ WRITES_ENABLED: true }), gb = g.set(["recR8", "recR10", "recR9"]); await g.goLive();
 let gp = g.plan(gb, { snorkel: "recVA|pp" }, { divers: "12" });

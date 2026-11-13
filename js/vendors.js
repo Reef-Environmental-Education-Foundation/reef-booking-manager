@@ -25,7 +25,7 @@ window.ReefVendors = (function () {
 
   /* ---------- rate model ---------- */
   /* Rate Key pattern: <vendor>_<service>_<kind>_<year>. Read the service words from the key, ignoring leading words that are just the vendor's name
-     (a vendor called "Key Dives" has the word "dive(s)" in every key). If stripping the vendor words leaves no service word, use the whole key. */
+     (a vendor whose name contains "dive" has that word in every key). If stripping the vendor words leaves no service word, use the whole key. */
   function keyInfo(key, vendorName) {
     const t = String(key || "").toLowerCase().split("_").filter(Boolean);
     const vn = new Set(String(vendorName || "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
