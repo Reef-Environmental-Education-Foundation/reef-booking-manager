@@ -1,6 +1,6 @@
 /* REEF Booking Program Manager: UI. Reads through ReefData only. Contains no booking data. */
 (function () {
-  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits, K = window.ReefContract;
+  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits, K = window.ReefContract, V = window.ReefVendors;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = n => n == null || n === "" || isNaN(n) ? "—" : "$" + Math.round(+n).toLocaleString("en-US");
@@ -14,7 +14,7 @@
   const chip = (k, t) => `<span class="chip c-${k}">${esc(t)}</span>`;
   const atUrl = (tbl, rec) => `https://airtable.com/${C.BASE_ID}/${tbl}/${rec}`;
 
-  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, drafts: {}, result: {}, recent: [], cd: {}, saving: false, savedAt: 0, caps: null };
+  const S = { auto: true, loadedAt: null, loadErr: null, data: null, bookings: [], view: "home", bid: null, tab: "overview", role: "staff", filter: "active", q: "", wi: null, drafts: {}, result: {}, recent: [], cd: {}, vp: {}, vpres: {}, saving: false, savedAt: 0, caps: null };
 
   /* ---------- model ---------- */
   function build(data) {
@@ -201,12 +201,12 @@
   function ratesOf(vrec) { return S.data.rates.filter(r => (r.fields[D.FX.rates.vendor] || []).includes(vrec.id)); }
   const rateVal = r => { const f = r.fields, X = D.FX.rates; return f[X.cur] != null ? f[X.cur] : (f[X.num] != null ? f[X.num] : null); };
   function vendors(b) {
-    if (!P.isReady()) return noPrice();
+    if (!P.isReady()) return vrPanel(b) + noPrice();
     const X = D.FX.vendors, XR = D.FX.rates, base = inputsOf(b), r0 = P.calc(base, {});
     const vs = S.data.vendors.filter(v => /boat|charter|dive|snorkel|kayak|marine/i.test(txt(v.fields[X.cat]) || "") || /boat|dive|princess|ocean/i.test(v.fields[X.name] || ""));
     const mote = S.data.vendors.filter(v => /mote/i.test(v.fields[X.name] || "") && !vs.includes(v)); vs.push(...mote);
     S.vlist = vs;
-    return `<div class="card"><h3>Boat / snorkel scenario ${chip("proto", "READ-ONLY")}</h3>
+    return vrPanel(b) + `<div class="card"><h3>Boat / snorkel scenario ${chip("proto", "READ-ONLY")}</h3>
       ${r0.manual ? `<div class="banner b"><div><strong>This booking uses the manual Estimated Vendor Cost (${money(base.manualVendor)}).</strong>The scenario below is shown as a change relative to that estimate, not recomputed from zero boats.</div></div>` : ""}
       ${r0.gearIncluded ? '<div class="note">Snorkel gear is included in the Pennekamp boat fee, so the scenario adds no separate gear charge (Martha 2026-11-05). Airtable\'s automatic vendor formula still adds gear when no manual estimate is set; that is Airtable\'s figure, not changed here.</div>' : ""}
       <p class="note">Separate the questions: how many vessels a vendor has, how many people each carries, how many departures your group needs, and what the vendor actually quotes. Today's price uses the Rates-table defaults (${money(P.R.boatRate)} per departure, ${P.R.boatCap} aboard, ${P.R.vessels ?? "?"} vessels on file), not a quote for this group.</p>
@@ -229,6 +229,29 @@
     const XR = D.FX.rates, rows = S.data.rates.filter(r => /mote/i.test(String(r.fields[XR.key] || "")) && !(vs || []).some(v => ratesOf(v).includes(r)));
     if (!rows.length) return "";
     return `<h3>Activity rates</h3><div class="card"><table><tr><th>Rate</th><th class="num">Value</th><th>Unit</th></tr>${rows.map(r => `<tr><td>${esc(r.fields[XR.name] || r.fields[XR.key])}</td><td class="num">${rateVal(r) == null ? "—" : money(rateVal(r))}</td><td>${esc(txt(r.fields[XR.unit]) || "")}</td></tr>`).join("")}</table><div class="note">No vendor record exists for this activity yet, so the rate is shown here instead of under Vendors on file.</div></div>`;
+  }
+  /* ---------- Vendors and rates panel (js/vendors.js). Read side first; picker and guarded save follow ---------- */
+  const rateBadge = r => r.pending ? '<span class="chip c-pend">Pending vendor confirmation</span>' : /confirmed/i.test(r.status) ? chip("ok", "Confirmed") : r.placeholder ? chip("fix", "Placeholder - not real") : /renegotiat/i.test(r.status) ? chip("chk", "Needs renegotiation") : r.status ? chip("notb", r.status) : "";
+  const rateTags = r => rateBadge(r) + (r.confirmBefore ? ' <span class="chip c-notb">confirm before booking</span>' : "") + (r.unavailable ? ' ' + chip("fix", "not available") : "");
+  const ratePrice = r => r.value == null ? "—" : money2(r.value) + (r.unit && r.unit !== "—" ? " " + esc(r.unit) : "");
+  const afterNote = (r, arrival) => r.eff && arrival && r.eff > String(arrival).slice(0, 10) ? `<div class="vr-amber">Rate sheet dated ${esc(fmtD(r.eff))}, after this arrival</div>` : "";
+  function vrCurrent(b, cur) {
+    const arrival = b.g("arrival"), rows = [];
+    V.SLOTS.map(s => s.id).concat(["other", "capacity"]).forEach(sl => {
+      if (!cur.by[sl].length) return;
+      rows.push(`<tr class="vr-grp"><th colspan="4">${esc(V.SLOT_LABEL[sl])}</th></tr>` + cur.by[sl].map(r => `<tr class="vr-rate"><td>${esc(r.vendorName || "—")}</td><td>${esc(r.name)}${afterNote(r, arrival)}</td><td class="num">${ratePrice(r)}</td><td>${rateTags(r)}</td></tr>`).join(""));
+    });
+    if (cur.unknown.length) rows.push(`<tr class="vr-grp"><th colspan="4">Not found in the Rates read</th></tr><tr><td colspan="4" class="note">${cur.unknown.length} linked record${cur.unknown.length === 1 ? "" : "s"} could not be matched to a Rates row. The picker leaves them as they are.</td></tr>`);
+    return rows.length ? `<table class="vr-tbl"><tr><th>Vendor</th><th>Rate</th><th class="num">Price</th><th>Status</th></tr>${rows.join("")}</table>` : '<div class="note" id="vrNone">No rate records are linked to this booking yet.</div>';
+  }
+  function vrPanel(b) {
+    if (!S.vidx) return `<div class="card" id="vrPanel"><h3>Vendors and rates</h3><div class="warn">The Rates, Vendors and Activities tables could not be read${S.data && S.data.vdataError ? " (" + esc(S.data.vdataError) + ")" : ""}. Nothing can be shown or picked here until they load. Press Refresh from Airtable.</div></div>`;
+    const cur = V.current(b, S.vidx), miss = String(b.g("vendorMissing") || "").trim(), vc = typeof b.g("vendorAuto") === "number" ? b.g("vendorAuto") : 0;
+    const cf = V.conflicts(cur).map(c => `<div class="warn">Two vendors are linked under <b>${esc(V.SLOT_LABEL[c.slot])}</b> (${esc(c.vendors.join(", "))}). Airtable prices at the higher rate. Pick one vendor to fix this.</div>`).join("");
+    return `<div class="card" id="vrPanel"><h3>Vendors and rates</h3>
+      <div class="${miss ? "vr-missing" : "note"}" id="vrMissing"><b>Vendor rates missing (auto):</b> ${miss ? esc(miss) : "none reported"}</div>
+      <div class="note">A missing rate costs $0, so the vendor cost below is understated until it is linked. Vendor costs now: <b id="vrCost">${money2(vc)}</b></div>
+      ${cf}${vrCurrent(b, cur)}</div>`;
   }
   function wireVendors() {
     const b = cur(), base = inputsOf(b), r00 = P.calc(base, {}), X = D.FX.vendors, XR = D.FX.rates, r0 = r00, gd = r00.gearIncluded ? 0 : P.R.gear;
@@ -617,7 +640,7 @@
       renderBanner(Object.assign(M.state(), { full: true }));   // the switch depends on what the token can do
       const data = await D.loadAll(silent ? null : (n, c) => { const p = $("prog"); if (p) p.textContent = n + ": " + c + " records"; });
       if (silent && (S.saving || S.savedAt >= started)) return;   // a save finished while this read was in flight: it may be stale, the next refresh will be fine
-      S.data = data; S.loadErr = null; S.pr = P.load(S.data.rates); build(S.data); $("roleSel").value = S.role;
+      S.data = data; S.loadErr = null; S.pr = P.load(S.data.rates); S.vidx = S.data.vdata ? V.index(S.data.vdata) : null; build(S.data); $("roleSel").value = S.role;
       if (silent) { const y = window.scrollY, ae = document.activeElement; if (ae && ae.matches && ae.matches("#main input, #main select, #main textarea")) statusbar(); else { render(); window.scrollTo(0, y); } } else render();
       schedule();
     } catch (e) {

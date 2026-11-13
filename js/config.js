@@ -66,7 +66,15 @@ window.REEF_CONFIG = {
     // links
     scheduleLinks: "fldU7Wh5iEubsYwxI", itinLinks: "fldAmdGgbJThGCufS", commsLinks: "fldu4exjBCBHPiPlk", checklistLinks: "fld4sbsDUaysZquHi", changeLinks: "fldTKpwFsYBDlqLVA",
     activities: "fldLJq96jdno7p9sS", programType: "fldnMmE0udfDe8ke2", cohorts: "fldxhHNKnDAIN4ubk", rotation: "fldOr4EoGbIrunomi",
-    schedNotes: "fldLM08w3h7sokUZF", walkthrough: "fldDUh5DMgXDOVaoN", daysToArrival: "fldVkGBpwOofwLobv"
+    schedNotes: "fldLM08w3h7sokUZF", walkthrough: "fldDUh5DMgXDOVaoN", daysToArrival: "fldVkGBpwOofwLobv",
+    // vendor and rate picker (js/vendors.js). pricingRates is a LINK field: it is written only by js/vendors.js, never via EDITABLE.
+    pricingRates: "fldsQ4wzMfg0qLlVM", vendorMissing: "fldIxxmRGSbWqJV49", rollSnorkelPP: "fldZ0vo6O2MEr7dnZ",
+    divers: "fldaBe4HJfQI1BmCC", snorkelers: "fldSUco1o4mGgwu3T"   // new count fields, blank on existing bookings, no formula reads them yet
+  },
+  /* Vendor and rate picker: the ONLY fields js/vendors.js may write (its own allowlist, mirrored by tests). Keys of F. */
+  VENDOR_PICKER: {
+    WRITE_FIELDS: ["pricingRates", "divers", "snorkelers"],
+    COUNTS: { divers: { label: "# Divers", min: 0, max: 400 }, snorkelers: { label: "# Snorkelers", min: 0, max: 400 } }
   },
   /* Fields that show REEF's internal cost or margin. A scoped token can still read these.
      Hiding them in the page is a courtesy for the "Staff view", NOT security.  */
