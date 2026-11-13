@@ -1,6 +1,6 @@
 /* REEF Booking Program Manager: UI. Reads through ReefData only. Contains no booking data. */
 (function () {
-  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits, K = window.ReefContract, V = window.ReefVendors;
+  const C = window.REEF_CONFIG, F = C.F, D = window.ReefData, P = window.ReefPricing, E = window.ReefEdits, K = window.ReefContract, V = window.ReefVendors, M = window.ReefMode;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const money = n => n == null || n === "" || isNaN(n) ? "—" : "$" + Math.round(+n).toLocaleString("en-US");
@@ -76,7 +76,7 @@
     m.innerHTML = fn();
     if (keepFocus) { const q = $("q"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
     if (S.view === "booking" && S.tab === "budget") wireBudget();
-    if (S.view === "booking" && S.tab === "vendors") wireVendors();
+    if (S.view === "booking" && S.tab === "vendors") { wireVr(); wireVendors(); }
     if (S.view === "booking" && S.tab === "edit") wireEdit();
     if (S.view === "booking" && S.tab === "contract") wireContract();
   }
@@ -244,14 +244,76 @@
     if (cur.unknown.length) rows.push(`<tr class="vr-grp"><th colspan="4">Not found in the Rates read</th></tr><tr><td colspan="4" class="note">${cur.unknown.length} linked record${cur.unknown.length === 1 ? "" : "s"} could not be matched to a Rates row. The picker leaves them as they are.</td></tr>`);
     return rows.length ? `<table class="vr-tbl"><tr><th>Vendor</th><th>Rate</th><th class="num">Price</th><th>Status</th></tr>${rows.join("")}</table>` : '<div class="note" id="vrNone">No rate records are linked to this booking yet.</div>';
   }
+  const vpOf = b => S.vp[b.id] || (S.vp[b.id] = { choices: {}, counts: {}, base: b.raw[F.modified] || null, showAll: false });
+  const vrPlan = b => { const st = vpOf(b); return V.plan(b, S.vidx, { choices: st.choices, counts: st.counts, baseModified: st.base }); };
+  const vrCountVal = (b, k) => { const st = vpOf(b); return st.counts[k] !== undefined ? st.counts[k] : (b.raw[F[k]] == null ? "" : String(b.raw[F[k]])); };
+  function optBrief(o) {
+    const pr = o.rates.slice(0, 2).map(r => r.value == null ? "no price" : money2(r.value) + (r.unit && r.unit !== "—" ? " " + r.unit : "")).join(", ") + (o.rates.length > 2 ? " +" + (o.rates.length - 2) + " more" : "");
+    const cap = o.slot === "snorkel" ? o.capacity.snorkel : o.slot === "dive" ? o.capacity.dive : undefined;
+    return V.optionLabel(o) + " — " + pr + (o.pending ? " · pending vendor confirmation" : "") + (o.confirmBefore ? " · confirm before booking" : "") + (cap === undefined ? "" : cap == null ? " · capacity not on file" : " · capacity " + cap);
+  }
+  function optDetail(o, arrival) {
+    const cap = o.slot === "snorkel" ? o.capacity.snorkel : o.slot === "dive" ? o.capacity.dive : undefined;
+    return `<table class="vr-tbl vr-opt"><tr><th>Rate</th><th class="num">Price</th><th>Status</th></tr>${o.rates.map(r => `<tr><td>${esc(r.name)}${afterNote(r, arrival)}</td><td class="num">${ratePrice(r)}</td><td>${rateTags(r)}</td></tr>`).join("")}</table>
+      ${o.notes.length ? `<div class="vr-notes"><b>Notes:</b> ${o.notes.map(esc).join(" · ")}</div>` : '<div class="note">No notes on file for this vendor.</div>'}
+      ${cap === undefined ? "" : `<div class="vr-cap"><b>Capacity:</b> ${cap == null ? "capacity not on file" : esc(cap) + " passengers per trip"}</div>`}`;
+  }
+  function vrSlot(b, sl, cur, arrival, st) {
+    const opts = V.options(S.vidx, sl, arrival), init = V.initialChoice(S.vidx, cur, sl, arrival), val = st.choices[sl] !== undefined ? st.choices[sl] : init, sel = opts.find(o => o.id === val);
+    const lbl = V.SLOT_LABEL[sl];
+    const optHtml = [`<option value="none"${val === "none" ? " selected" : ""}>— no vendor for ${esc(lbl.toLowerCase())} —</option>`]
+      .concat(init === "__current" ? [`<option value="__current"${val === "__current" ? " selected" : ""}>Currently linked (not a standard vendor set)</option>`] : [])
+      .concat(opts.map(o => `<option value="${esc(o.id)}"${val === o.id ? " selected" : ""}>${esc(optBrief(o))}</option>`)).join("");
+    const chg = val !== init && val !== "__current";
+    return `<div class="vr-slot${chg ? " chg" : ""}" data-slot="${sl}"><div class="ctl${chg ? " chg" : ""}"><label for="vr_${sl}">${esc(lbl)}</label><select id="vr_${sl}" data-vr="${sl}">${optHtml}</select></div>
+      ${chg ? '<span class="chgtag">changed, not saved</span>' : ""}
+      ${sl === "dive" ? '<div class="vr-info" id="vrDiveNote">Dive pricing is entered manually for now. The rates and capacity below are for reference; no dive total is calculated.</div>' : ""}
+      ${sel ? optDetail(sel, arrival) : (init === "__current" ? '<div class="note">The linked records are shown in the table above. Pick a vendor to replace them.</div>' : '<div class="note">Nothing linked for this category.</div>')}
+      ${opts.length > 1 ? `<details class="why"><summary>Compare all ${opts.length} options</summary><table class="vr-tbl"><tr><th>Vendor</th><th>Price</th><th>Notes</th><th>Capacity</th></tr>${opts.map(o => { const cap = o.slot === "snorkel" ? o.capacity.snorkel : o.slot === "dive" ? o.capacity.dive : undefined; return `<tr><td>${esc(V.optionLabel(o))}<div>${o.pending ? '<span class="chip c-pend">Pending vendor confirmation</span>' : ""}${o.confirmBefore ? ' <span class="chip c-notb">confirm before booking</span>' : ""}</div>${o.afterArrival ? `<div class="vr-amber">Rate sheet dated ${esc(fmtD(o.rates[0].eff))}, after this arrival</div>` : ""}</td><td>${o.rates.map(r => esc(r.name) + ": " + ratePrice(r)).join("<br>")}</td><td>${esc(o.notes.join(" · ")) || "—"}</td><td>${cap === undefined ? "—" : cap == null ? "capacity not on file" : esc(cap)}</td></tr>`; }).join("")}</table></details>` : ""}</div>`;
+  }
+  /* The part that changes as you type: capacity checks, the change summary, notices and the cost preview. */
+  function vrDyn(b) {
+    const st = vpOf(b), p = vrPlan(b), cap = V.capacity(b, S.vidx, p.links.after, st.counts);
+    const capHtml = cap.items.length ? `<h4>Capacity check <span class="note">(warnings only, they never block saving)</span></h4>${cap.items.map(i => `<div class="${i.level === "amber" ? "vr-amberbox" : i.level === "ok" ? "note vr-ok" : "note"}">${i.level === "amber" ? "⚠ " : i.level === "ok" ? "✓ " : ""}${esc(i.text)}</div>`).join("")}` : "";
+    const errs = Object.keys(p.errors).map(k => `<div class="warn" role="alert">${esc((V.SLOT_LABEL[k]) || (C.VENDOR_PICKER.COUNTS[k] || {}).label || k)}: ${esc(p.errors[k])}</div>`).join("");
+    let chg = "";
+    if (p.diff.length) {
+      const rem = p.links.removed, add = p.links.added.filter(r => !p.links.before.includes(r.id));
+      chg = `<h4>What would change</h4><table class="diff"><tr><th>Field</th><th>Now</th><th>Would become</th></tr>${p.diff.map(d => `<tr><td>${esc(d.label)}</td><td class="bf">${esc(show(d.before))}</td><td class="af">${esc(show(d.after))}</td></tr>`).join("")}</table>
+        ${p.changedRates ? `<div class="small">${rem.length ? "Unlinked: " + rem.map(r => esc(r.key)).join(", ") + ". " : ""}${add.length ? "Linked: " + add.map(r => esc(r.key)).join(", ") + "." : ""}</div>` : ""}
+        ${p.switched ? `<div class="warn" id="vrSwitch"><b>Switching ${p.switched.from === "pp" ? "per person to per boat" : "per boat to per person"}.</b> These rate records no longer apply and will be removed in the same save: ${p.leftover.map(r => esc(r.key)).join(", ")}.</div>` : ""}
+        ${p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}${vrPreview(b, p)}`;
+    }
+    return errs + chg + capHtml;
+  }
+  function vrPreview(b, p) { return ""; }
   function vrPanel(b) {
     if (!S.vidx) return `<div class="card" id="vrPanel"><h3>Vendors and rates</h3><div class="warn">The Rates, Vendors and Activities tables could not be read${S.data && S.data.vdataError ? " (" + esc(S.data.vdataError) + ")" : ""}. Nothing can be shown or picked here until they load. Press Refresh from Airtable.</div></div>`;
-    const cur = V.current(b, S.vidx), miss = String(b.g("vendorMissing") || "").trim(), vc = typeof b.g("vendorAuto") === "number" ? b.g("vendorAuto") : 0;
+    const cur = V.current(b, S.vidx), st = vpOf(b), arrival = String(b.g("arrival") || "").slice(0, 10) || null, miss = String(b.g("vendorMissing") || "").trim(), vc = typeof b.g("vendorAuto") === "number" ? b.g("vendorAuto") : 0;
     const cf = V.conflicts(cur).map(c => `<div class="warn">Two vendors are linked under <b>${esc(V.SLOT_LABEL[c.slot])}</b> (${esc(c.vendors.join(", "))}). Airtable prices at the higher rate. Pick one vendor to fix this.</div>`).join("");
-    return `<div class="card" id="vrPanel"><h3>Vendors and rates</h3>
+    const need = V.neededSlots(b, cur), slots = st.showAll ? V.SLOTS.map(s => s.id) : need, stale = !!Object.keys(st.choices).concat(Object.keys(st.counts)).length && st.base !== (b.raw[F.modified] || null);
+    const live = M.isLive();
+    return `<div class="card" id="vrPanel"><h3>Vendors and rates ${live ? chip("fix", "LIVE") : chip("plan", "SANDBOX")}</h3>
       <div class="${miss ? "vr-missing" : "note"}" id="vrMissing"><b>Vendor rates missing (auto):</b> ${miss ? esc(miss) : "none reported"}</div>
-      <div class="note">A missing rate costs $0, so the vendor cost below is understated until it is linked. Vendor costs now: <b id="vrCost">${money2(vc)}</b></div>
-      ${cf}${vrCurrent(b, cur)}</div>`;
+      <div class="note">A missing rate costs $0, so the vendor cost is understated until it is linked. Vendor costs now: <b id="vrCost">${money2(vc)}</b></div>
+      ${cf}${vrCurrent(b, cur)}
+      <h4>Pick vendors</h4><div class="note">Choosing a vendor replaces that category's linked rates (never adds a second vendor). ${live ? "Live: Review change saves to Airtable." : "Sandbox: nothing is saved; this only shows what a change would do."} Rates dated after the arrival date are flagged. Nothing is sent to a vendor or a school.</div>
+      ${stale ? '<div class="warnred" role="alert">This booking changed in Airtable after you started picking. Discard your choices and start again before saving.</div>' : ""}
+      ${slots.length ? slots.map(sl => vrSlot(b, sl, cur, arrival, st)).join("") : '<div class="note">No vendor activity (boat, kayak, Pennekamp) is requested on this booking. Tick below to show every category.</div>'}
+      <label class="chk vr-all"><input type="checkbox" id="vrAll" ${st.showAll ? "checked" : ""}> Show all categories</label>
+      <div class="grid g3 vr-counts"><div class="ctl"><label for="vr_snorkelers">${esc(C.VENDOR_PICKER.COUNTS.snorkelers.label)}</label><input id="vr_snorkelers" data-vc="snorkelers" inputmode="numeric" value="${esc(vrCountVal(b, "snorkelers"))}"><span class="note">Blank means not set: students + chaperones are used.</span></div>
+        <div class="ctl"><label for="vr_divers">${esc(C.VENDOR_PICKER.COUNTS.divers.label)}</label><input id="vr_divers" data-vc="divers" inputmode="numeric" value="${esc(vrCountVal(b, "divers"))}"><span class="note">Blank means not set.</span></div></div>
+      <div id="vrDyn" role="status">${vrDyn(b)}</div>
+      <p><button class="btn alt" type="button" id="vrReset"${Object.keys(st.choices).length + Object.keys(st.counts).length ? "" : " hidden"}>Discard choices</button></p>
+      <div id="vrResult">${""}</div></div>`;
+  }
+  function wireVr() {
+    const b = cur(); if (!b || !$("vrPanel")) return; const st = vpOf(b), arrival = String(b.g("arrival") || "").slice(0, 10) || null;
+    const repaint = fid => { $("vrPanel").outerHTML = vrPanel(b); wireVr(); if (fid && $(fid)) $(fid).focus(); };
+    document.querySelectorAll("#vrPanel select[data-vr]").forEach(e => e.onchange = () => { const sl = e.dataset.vr; if (e.value === V.initialChoice(S.vidx, V.current(b, S.vidx), sl, arrival)) delete st.choices[sl]; else st.choices[sl] = e.value; repaint(e.id); });
+    document.querySelectorAll("#vrPanel input[data-vc]").forEach(e => e.oninput = () => { const k = e.dataset.vc, o = b.raw[F[k]] == null ? "" : String(b.raw[F[k]]); if (e.value === o) delete st.counts[k]; else st.counts[k] = e.value; $("vrDyn").innerHTML = vrDyn(b); const rs = $("vrReset"); if (rs) rs.hidden = !(Object.keys(st.choices).length + Object.keys(st.counts).length); });
+    $("vrAll").onchange = e => { st.showAll = e.target.checked; repaint("vrAll"); };
+    $("vrReset").onclick = () => { delete S.vp[b.id]; repaint(); };
   }
   function wireVendors() {
     const b = cur(), base = inputsOf(b), r00 = P.calc(base, {}), X = D.FX.vendors, XR = D.FX.rates, r0 = r00, gd = r00.gearIncluded ? 0 : P.R.gear;
@@ -417,7 +479,6 @@
   }
 
   /* ---------- Edit tab: Sandbox (check price, never saves) and Live (review, confirm, save) ---------- */
-  const M = window.ReefMode;
   const origStr = (b, k) => b.raw[F[k]] == null ? "" : String(b.raw[F[k]]);
   const draftOf = bid => S.drafts[bid];
   const changesOf = b => Object.assign({}, (draftOf(b.id) || { vals: {} }).vals);

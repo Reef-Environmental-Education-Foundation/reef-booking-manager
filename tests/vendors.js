@@ -57,5 +57,59 @@ ok(V.neededSlots(bk(), V.current(bk(), idx)).join() === "snorkel,gear,penn", "ne
 const mo = V.matchOption(V.options(idx, "snorkel", "2027-05-01"), V.current(bk({ [F.pricingRates]: ["recR8"] }), idx).by.snorkel);
 ok(mo && mo.option.vendorId === "recVB" && mo.exact, "pre-select: the option matching the linked records");
 
+/* ---- Stage 2: plan (replace within a category, no duplicates, leftovers) ---- */
+const B = (links, extra) => bk(Object.assign({ [F.pricingRates]: links }, extra || {}));
+const P = (b, choices, counts, o) => V.plan(b, idx, Object.assign({ choices: choices || {}, counts: counts || {} }, o || {}));
+const fin = p => p.links.after.slice().sort().join();
+let p = P(B(["recR8", "recR10", "recR9"]), { snorkel: "recVA|pp" });
+ok(p.ok && p.links.after.join() === "recR1" && p.switched.from === "boat" && p.switched.to === "pp", "plan: per-boat to per-person replaces the charter and reports the switch");
+ok(ids(p.leftover) === ["recR8", "recR10", "recR9"].sort().join() && ids(p.links.removed) === ["recR8", "recR10", "recR9"].sort().join(), "plan: per-boat to per-person lists the leftover charter, gear and capacity records and removes them in the same save");
+p = P(B(["recR1"]), { snorkel: "recVB|boat" });
+ok(p.links.after.join() === "recR8" && p.switched.from === "pp" && ids(p.leftover) === "recR1", "plan: per-person to per-boat replaces the per-person record (no cross-category removal)");
+p = P(B(["recR8", "recR19", "recR17", "recR7"]), { snorkel: "recVD|pp" });
+ok(p.links.after.includes("recR19") && p.links.after.includes("recR17") && p.links.after.includes("recR12") && !p.links.after.includes("recR8"), "plan: one record per category: the snorkel pick replaces the old snorkel record and leaves kayak and Pennekamp alone");
+ok(p.links.after.includes("recR7") && !p.leftover.some(r => r.id === "recR7"), "plan: only snorkel gear is a leftover of a per-boat to per-person switch; other gear (dive gear) is kept");
+p = P(B(["recR7", "recR2"]), { dive: "recVA|set" });
+ok(p.links.after.length === new Set(p.links.after).size && ids(p.links.added) === ["recR2", "recR3", "recR4"].join() && p.links.after.length === 4, "plan: duplicates are prevented (an already-linked record is not linked twice)");
+p = P(B(["recR1"]), { snorkel: "recVA|pp" });
+ok(!p.ok && p.diff.length === 0 && Object.keys(p.fields).length === 0, "plan: choosing what is already linked changes nothing");
+p = P(B(["recR1", "recR3"]), { dive: "__current" }); ok(!p.ok, "plan: leaving a non-picker set as 'currently linked' changes nothing");
+p = P(B(["recR8", "recR19"]), { snorkel: "none" }); ok(p.links.after.join() === "recR19" && p.switched === null, "plan: 'no vendor' clears only that category");
+p = P(B([]), { snorkel: "recVZ|pp" }); ok(p.errors.snorkel && !p.ok, "plan: a hidden (placeholder) vendor cannot be chosen");
+ok(P(B(["recR8", "recUNKNOWN0000001"]), { snorkel: "recVA|pp" }).links.after.includes("recUNKNOWN0000001"), "plan: linked records the picker does not know are kept");
+p = P(B(["recR8"]), { snorkel: "recVA|pp" }, { divers: "12", snorkelers: "30" });
+ok(p.fields[F.divers] === 12 && p.fields[F.snorkelers] === 30 && Object.keys(p.fields).every(k => [F.pricingRates, F.divers, F.snorkelers].includes(k)), "plan: # Divers and # Snorkelers are saved as integers; the PATCH fields are only on the allowlist");
+ok(P(B([]), {}, { divers: "401" }).errors.divers === "Must be 0 to 400" && P(B([]), {}, { divers: "x" }).errors.divers && P(B([]), {}, { snorkelers: "-1" }).errors.snorkelers, "plan: counts must be whole numbers 0-400");
+ok(!P(B([]), {}, { divers: "", snorkelers: "" }).ok, "plan: blank counts on a booking that has none are 'not set', no change");
+p = P(B([], { [F.divers]: 8 }), {}, { divers: "" }); ok(p.ok && p.fields[F.divers] === null, "plan: clearing a count writes blank");
+p = P(B(["recR8"], { [F.approved]: true, [F.propVer]: 2 }), { snorkel: "recVA|pp" });
+ok(p.warnings[0] === "Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished." && p.acks.some(a => a.id === "approve") && p.predicted.propVer === 3 && p.predicted.approved === false, "plan: Approved to Share shows the exact un-approve warning and needs a tick");
+p = P(B(["recR8"], { [F.approved]: true }), {}, { divers: "5" });
+ok(!p.warnings.some(w => /un-approve/.test(w)) && !p.acks.some(a => a.id === "approve") && p.predicted.approved === true, "plan: # Divers and # Snorkelers alone say nothing about un-approving (not yet watched by the guardrail)");
+p = P(B(["recR8"], { [F.agreementStatus]: "Signed" }), { snorkel: "recVA|pp" }); ok(p.acks.some(a => a.id === "locked") && /Contract Status Signed/.test(p.warnings.join()), "plan: Signed needs the extra tick");
+p = P(B(["recR8"], { [F.agreementStatus]: "Sent" }), {}, { divers: "5" }); ok(p.acks.some(a => a.id === "locked"), "plan: Contract Status Sent needs the extra tick, even for a count change");
+p = P(B(["recR8"], { [F.pricingModel]: "Legacy (completed)" }), { snorkel: "recVA|pp" }); ok(p.acks.some(a => a.id === "locked") && /Legacy \(completed\)/.test(p.warnings.join()), "plan: Legacy (completed) needs the extra tick");
+p = P(B(["recR8"]), { snorkel: "recVA|pp" }); ok(!p.acks.length && p.pendingAdded.length === 1 && /test record/.test(p.warnings.join()), "plan: pending rate on a ZZZ test record is flagged but needs no tick");
+const real = B(["recR8"], { [F.name]: "Synthetic Real School - 2027" }); p = P(real, { snorkel: "recVA|pp" });
+ok(p.acks.some(a => a.id === "pending") && !p.isTestRecord, "plan: saving a pending rate on a real booking needs the acknowledgment tick");
+p = P(real, { snorkel: "recVD|pp" }); ok(!p.acks.some(a => a.id === "pending"), "plan: a confirmed rate on a real booking needs no pending tick");
+
+/* ---- Stage 3: capacity ---- */
+const CAP = (links, extra, counts) => V.capacity(bk(Object.assign({ [F.pricingRates]: links }, extra || {})), idx, links, counts);
+const kinds = c => c.items.map(i => i.kind).join();
+let c = CAP(["recR1"], { [F.students]: 28, [F.chaps]: 5, [F.boatTrips]: 1 }); ok(/snorkel-over/.test(kinds(c)) && c.hasAmber, "capacity: snorkelers over the snorkel capacity warn (amber)");
+c = CAP(["recR1"], { [F.boatTrips]: 1 }); ok(kinds(c).includes("snorkel-ok") && !c.hasAmber && c.assumed, "capacity: 25 snorkelers fit 30");
+ok(c.items.some(i => i.kind === "assumed" && /students \+ chaperones \(25\)/.test(i.text)), "capacity: blank # Snorkelers uses students + chaperones and says so");
+c = CAP(["recR1", "recR2"], { [F.boatTrips]: 1, [F.snorkelers]: 10 }, { divers: "25" }); ok(/dive-over/.test(kinds(c)) && /snorkel-ok/.test(kinds(c)), "capacity: divers over the dive capacity warn on their own");
+c = CAP(["recR1", "recR2"], { [F.boatTrips]: 1 }, { snorkelers: "15", divers: "18" });
+ok(/mixed-over/.test(kinds(c)) && c.items.find(i => i.kind === "mixed-over").text.includes("lower of the two capacities (20)") && /snorkel-ok/.test(kinds(c)) && /dive-ok/.test(kinds(c)), "capacity: mixed group shows each check and the combined headcount against the lower capacity (warning)");
+c = CAP(["recR1", "recR2"], { [F.boatTrips]: 1 }, { snorkelers: "8", divers: "10" }); ok(/mixed-ok/.test(kinds(c)) && c.items.find(i => i.kind === "mixed-ok").level === "amber", "capacity: a mixed group that fits is still flagged, the mixed-trip limit may be lower");
+c = CAP(["recR12", "recR13"], { [F.boatTrips]: 1, [F.snorkelers]: 10 }, { divers: "5" }); ok(/dive-nocap/.test(kinds(c)) && c.items.find(i => i.kind === "dive-nocap").text.includes("capacity not on file") && /mixed-nocap/.test(kinds(c)), "capacity: a vendor with no capacity record says 'capacity not on file'");
+c = CAP(["recR1", "recR13"], { [F.boatTrips]: 1 }, { snorkelers: "10", divers: "5" }); ok(/mixed-differ/.test(kinds(c)) && !/mixed-over/.test(kinds(c)), "capacity: different snorkel and dive vendors get no invented combined limit");
+c = CAP(["recR1"], { [F.boatTrips]: 2 }); ok(/trips/.test(kinds(c)) && /per trip/.test(c.items.find(i => i.kind === "trips").text) && /how the group is split/.test(c.items.find(i => i.kind === "trips").text), "capacity: more than one trip says capacity is per trip and flags the unknown split");
+c = CAP(["recR1"], { [F.boatTrips]: 1 }); ok(!/trips/.test(kinds(c)), "capacity: one trip gets no per-trip note");
+c = CAP([], { [F.boatTrips]: 1 }); ok(/none/.test(kinds(c)) && !c.hasAmber, "capacity: no vendor chosen is an info line, not a warning");
+ok(JSON.stringify(V.parseCount("")) === '{"blank":true,"value":null}' && V.parseCount("7").value === 7 && V.parseCount("x").bad, "counts: blank means not set");
+
 module.exports = { w, V, idx, FX, ok, results: () => ({ pass, fail }) };
 if (require.main === module) { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }

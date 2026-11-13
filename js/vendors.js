@@ -150,5 +150,107 @@ window.ReefVendors = (function () {
     return SLOTS.filter(s => s.needs.test(acts) || cur.by[s.id].length).map(s => s.id);
   }
 
-  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots };
+
+  /* ---------- the change plan (never writes) ---------- */
+  const show = v => v === null || v === undefined || v === "" ? "(blank)" : String(v);
+  const keyName = (idx, id) => (idx.byId[id] && idx.byId[id].key) || id;
+  /* The dropdown value that stands for "what is linked now": the exact matching option, a marker for linked records that are not a picker set, or none. */
+  function initialChoice(idx, cur, slot, arrival) {
+    const m = matchOption(options(idx, slot, arrival), cur.by[slot]);
+    return m && m.exact ? m.option.id : (cur.by[slot].length ? "__current" : "none");
+  }
+  const parseCount = raw => { if (raw === null || raw === undefined || String(raw).trim() === "") return { blank: true, value: null }; const t = String(raw).trim(); return /^\d+$/.test(t) ? { blank: false, value: +t } : { blank: false, value: null, bad: true }; };
+
+  /* b: booking model ({raw, actNames}). o: {choices: {slot: optionId|"none"}, counts: {divers, snorkelers} raw strings, baseModified}.
+     choices a slot is absent from, or set to what is linked now, leave that category alone. Selecting REPLACES the old records of that category and
+     never touches records of other categories (except the leftovers of a per-boat/per-person switch, listed separately). */
+  function plan(b, idx, o) {
+    o = o || {}; const raw = b.raw, arrival = dateOnly(raw[F.arrival]), cur = current(b, idx), choices = o.choices || {}, counts = o.counts || {};
+    const errors = {}, fields = {}, diff = [], remove = new Set(), add = [], changedSlots = []; let leftover = [], switched = null;
+    SLOTS.forEach(sl => {
+      const ch = choices[sl.id]; if (ch === undefined || ch === initialChoice(idx, cur, sl.id, arrival) || ch === "__current") return;
+      const chosen = ch === "none" ? null : options(idx, sl.id, arrival).find(x => x.id === ch);
+      if (ch !== "none" && !chosen) { errors[sl.id] = "That vendor choice is not available for this booking"; return; }
+      changedSlots.push(sl.id); cur.by[sl.id].forEach(r => remove.add(r.id)); if (chosen) chosen.rates.forEach(r => add.push(r));
+      if (sl.id === "snorkel") {
+        const oldModel = cur.by.snorkel.some(r => r.model === "pp") ? "pp" : (cur.by.snorkel.length ? "boat" : null), newModel = chosen ? chosen.model : null;
+        if (oldModel && newModel && oldModel !== newModel) {
+          switched = { from: oldModel, to: newModel }; leftover = cur.by.snorkel.slice();
+          if (newModel === "pp") {   // per-person pricing does not use the per-boat charter + gear + capacity records
+            cur.by.gear.filter(r => r.k.snorkel).concat(cur.by.capacity.filter(r => r.svc === "snorkel")).forEach(r => { remove.add(r.id); leftover.push(r); });
+          }
+        }
+      }
+    });
+    const addIds = add.map(r => r.id), after = cur.ids.filter(id => !remove.has(id));
+    addIds.forEach(id => { if (!after.includes(id)) after.push(id); });   // no duplicates
+    const sorted = a => a.slice().sort().join(), changedRates = sorted(after) !== sorted(cur.ids);
+    if (changedRates) {
+      fields[F.pricingRates] = after;
+      diff.push({ key: "pricingRates", label: "Pricing Rates", before: cur.ids.length ? cur.ids.map(i => keyName(idx, i)).join(", ") : null, after: after.length ? after.map(i => keyName(idx, i)).join(", ") : null });
+    }
+    ["divers", "snorkelers"].forEach(k => {
+      if (counts[k] === undefined) return;
+      const spec = VP.COUNTS[k], r = window.ReefEdits.validateField(k, counts[k], { type: "int", min: spec.min, max: spec.max, required: false });
+      if (!r.ok) { errors[k] = r.err; return; }
+      const before = raw[F[k]] === undefined ? null : raw[F[k]]; if (show(before) === show(r.value)) return;
+      diff.push({ key: k, label: spec.label, before, after: r.value }); fields[F[k]] = r.value;
+    });
+    // approvals and warnings
+    const approved = !!raw[F.approved], propVer = raw[F.propVer] || 0, status = txt(raw[F.status]), agree = txt(raw[F.agreementStatus]);
+    const unapproves = approved && changedRates, legacy = txt(raw[F.pricingModel]) === "Legacy (completed)" || /completed/i.test(status), locked = legacy || /^(sent|signed)$/i.test(agree) || /signed/i.test(status);
+    const name = String(raw[F.name] || ""), test = name.startsWith(C.TEST_PREFIX), pendingAdded = add.filter(r => r.pending);
+    const warnings = [], acks = [];
+    if (unapproves) { warnings.push("Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished."); acks.push({ id: "approve", label: "I understand this un-approves the proposal" }); }
+    if (locked && diff.length) {
+      const why = [legacy ? "Legacy (completed)" : "", /^(sent|signed)$/i.test(agree) ? "Contract Status " + agree : "", /signed/i.test(status) && !/^signed$/i.test(agree) ? "Status " + status : ""].filter(Boolean).join(", ");
+      warnings.push("This booking is " + why + ". Changing its vendors can change what was already agreed or finished.");
+      acks.push({ id: "locked", label: "I understand this booking is " + why + " and I still want to change it" });
+    }
+    if (pendingAdded.length && !test) { warnings.push("Pending vendor confirmation: " + pendingAdded.map(r => r.key).join(", ") + ". The vendor has not confirmed these rates."); acks.push({ id: "pending", label: "I understand these rates are pending vendor confirmation" }); }
+    else if (pendingAdded.length) warnings.push("Pending vendor confirmation (test record, no tick needed): " + pendingAdded.map(r => r.key).join(", ") + ".");
+    const writeBlockedBy = !C.WRITES_ENABLED ? "Live editing is not switched on yet" : (C.WRITES_TEST_RECORDS_ONLY && !test ? "Only " + C.TEST_PREFIX + " test records may be saved live right now" : null);
+    return { ok: Object.keys(errors).length === 0 && diff.length > 0, errors, diff, fields, warnings, acks, ack: { needed: acks.length > 0 }, changedRates, changedSlots, switched, leftover,
+      links: { before: cur.ids, after, added: add, removed: cur.ids.filter(id => remove.has(id)).map(id => idx.byId[id] || { id, key: id }) },
+      approved, unapproves, propVer, propVerKnown: raw[F.propVer] != null, predicted: { approved: unapproves ? false : approved, propVer: unapproves ? propVer + 1 : propVer },
+      isTestRecord: test, writeBlockedBy, baseModified: o.baseModified !== undefined ? o.baseModified : (raw[F.modified] || null), pendingAdded };
+  }
+
+  /* ---------- capacity checks (warnings only, they never block saving) ---------- */
+  function capacity(b, idx, ids, counts) {
+    counts = counts || {}; const raw = b.raw, out = [], rs = ids.map(i => idx.byId[i]).filter(Boolean);
+    const sr = rs.find(r => r.slot === "snorkel"), dr = rs.find(r => r.slot === "dive"), acts = (b.actNames || []).join(", ");
+    const students = +raw[F.students] || 0, chaps = +raw[F.chaps] || 0, people = students + chaps, trips = +raw[F.boatTrips] || 0;
+    const cnt = k => parseCount(counts[k] !== undefined ? counts[k] : raw[F[k]]), dv = cnt("divers"), sk = cnt("snorkelers");
+    const snorkelers = sk.value != null ? sk.value : people, assumed = sk.value == null;
+    const wantsSnorkel = !!sr || /boat snorkel/i.test(acts), wantsDive = !!dr || (dv.value || 0) > 0;
+    const add = (level, text, kind) => out.push({ level, text, kind });
+    const sCap = sr ? capacityOf(idx, sr.vendorId).snorkel : null, dCap = dr ? capacityOf(idx, dr.vendorId).dive : null;
+    let checked = false;
+    if (wantsSnorkel && snorkelers > 0) {
+      if (assumed) add("info", "# Snorkelers is blank, so students + chaperones (" + people + ") are used as the snorkeler count.", "assumed");
+      if (!sr) add("info", "No snorkel vendor is chosen yet, so snorkel capacity cannot be checked.", "none");
+      else if (sCap == null) add("amber", sr.vendorName + ": snorkel capacity not on file. Call the vendor.", "snorkel-nocap");
+      else { checked = true; if (snorkelers > sCap) add("amber", "Snorkelers (" + snorkelers + ") are over " + sr.vendorName + "'s snorkel capacity of " + sCap + ".", "snorkel-over"); else add("ok", "Snorkelers (" + snorkelers + ") fit " + sr.vendorName + "'s snorkel capacity of " + sCap + ".", "snorkel-ok"); }
+    }
+    if (wantsDive && (dv.value || 0) > 0) {
+      if (!dr) add("info", "# Divers is " + dv.value + " but no dive vendor is chosen yet, so dive capacity cannot be checked.", "none");
+      else if (dCap == null) add("amber", dr.vendorName + ": dive capacity not on file. Call the vendor.", "dive-nocap");
+      else { checked = true; if (dv.value > dCap) add("amber", "Divers (" + dv.value + ") are over " + dr.vendorName + "'s dive capacity of " + dCap + ".", "dive-over"); else add("ok", "Divers (" + dv.value + ") fit " + dr.vendorName + "'s dive capacity of " + dCap + ".", "dive-ok"); }
+    } else if (dr && dv.blank) add("info", "# Divers is not set, so dive capacity cannot be checked.", "none");
+    // mixed group: both counts set explicitly
+    if (sk.value > 0 && dv.value > 0) {
+      const total = sk.value + dv.value;
+      if (!sr || !dr) add("info", "Mixed group (" + sk.value + " snorkelers + " + dv.value + " divers = " + total + "): choose both a snorkel and a dive vendor to check the combined headcount.", "mixed-none");
+      else if (sr.vendorId !== dr.vendorId) add("info", "Mixed group: the snorkel vendor (" + sr.vendorName + ") and dive vendor (" + dr.vendorName + ") differ, so each is checked on its own and there is no combined limit.", "mixed-differ");
+      else if (sCap == null || dCap == null) add("amber", "Mixed group (" + total + " people on one boat): combined headcount cannot be checked because " + (sCap == null ? "snorkel" : "dive") + " capacity is not on file for " + sr.vendorName + ".", "mixed-nocap");
+      else { checked = true; const low = Math.min(sCap, dCap);
+        if (total > low) add("amber", "Mixed group: " + sk.value + " snorkelers + " + dv.value + " divers = " + total + ", over the lower of the two capacities (" + low + "). The boat limit for a mixed trip may be lower than either figure. Check with " + sr.vendorName + ".", "mixed-over");
+        else add("amber", "Mixed group: " + total + " people against the lower of the two capacities (" + low + "). Fits, but the boat limit for a mixed trip may be lower than either figure, so confirm with " + sr.vendorName + ".", "mixed-ok"); }
+    }
+    if (trips > 1 && out.some(x => x.kind !== "assumed" && x.kind !== "none")) add("amber", "This booking has " + trips + " boat trips. Capacity is per trip, and the booking does not say how the group is split, so the total headcount is compared. Confirm the split with the vendor.", "trips");
+    return { items: out, hasAmber: out.some(x => x.level === "amber"), snorkelers, assumed, divers: dv.value, checked };
+  }
+
+  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots, initialChoice, plan, capacity, parseCount };
 })();
