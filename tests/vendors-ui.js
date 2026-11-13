@@ -10,7 +10,7 @@ const baseRates = Object.keys(rk).map((k, i) => mk("recRK" + i, { [FX.R.key]: k,
 const ID = { A: "recBKA000000001", BLANK: "recBKB000000001", APPR: "recBKC000000001", SIGNED: "recBKD000000001", LEGACY: "recBKE000000001", REAL: "recBKF000000001", MIX: "recBKG000000001", NOCAP: "recBKH000000001", EARLY: "recBKI000000001" };
 const base = o => Object.assign({ [f.status]: "Quoting", [f.arrival]: "2027-05-01", [f.departure]: "2027-05-02", [f.students]: 20, [f.chaps]: 5, [f.boatTrips]: 2, [f.activities]: ["recACTS"], [f.approved]: false, [f.propVer]: 1, [f.total]: 10000, [f.vendorAuto]: 1800, [f.modified]: "2026-11-02T00:00:00.000Z", [f.agreementStatus]: "Not Sent" }, o);
 const bookings = [
-  mk(ID.A, base({ [f.name]: "ZZZ Picker A", [f.org]: "ZZZ Test", [f.pricingRates]: ["recR8", "recR10", "recR9"] })),
+  mk(ID.A, base({ [f.name]: "ZZZ Picker A", [f.org]: "ZZZ Test", [f.pricingRates]: ["recR8", "recR10", "recR9"], [f.netIncome]: 777.77, [f.margin]: 1234.5, [f.marginPct]: 33.3, [f.totalCost]: 4321.09, [f.staffLabor]: 555.55, [f.manualVendorEst]: undefined })),
   mk(ID.BLANK, base({ [f.name]: "ZZZ Blank", [f.org]: "ZZZ Test", [f.vendorMissing]: "Missing: boat snorkel rate", [f.vendorAuto]: undefined })),
   mk(ID.APPR, base({ [f.name]: "ZZZ Approved", [f.org]: "ZZZ Test", [f.approved]: true, [f.approvedVer]: 1, [f.pricingRates]: ["recR8"] })),
   mk(ID.SIGNED, base({ [f.name]: "ZZZ Signed", [f.org]: "ZZZ Test", [f.agreementStatus]: "Signed", [f.pricingRates]: ["recR8"] })),
@@ -40,6 +40,7 @@ async function mock(pg) {
 const open = async (br, url, view) => { const pg = await br.newPage({ viewport: { width: 1280, height: 1400 } }); pg.errs = []; pg.on("pageerror", e => pg.errs.push(e.message)); await mock(pg); await pg.goto(url); await pg.fill("#tok", "pat_TEST123"); await pg.click("#go"); await pg.waitForSelector("#main h2"); return pg; };
 const goTab = async (pg, id) => { await pg.evaluate(i => REEF_UI.go("booking", i, "vendors"), id); await pg.waitForSelector("#vrPanel"); };
 const text = async (pg, sel) => (await pg.textContent(sel)).replace(/\s+/g, " ");
+const sleep = ms => new Promise(r => setTimeout(r, ms)); const until = async fn => { for (let n = 0; n < 200 && !fn(); n++) await sleep(50); };
 const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); await pg.waitForSelector("body.live"); };
 (async () => {
   await new Promise(r => srv.listen(0, r)); await new Promise(r => srvOpen.listen(0, r)); await new Promise(r => srvOff.listen(0, r));
@@ -119,9 +120,88 @@ const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); a
   ok(/25 people × \$75\.00 × 2 trips = \$3,750\.00/.test(await text(pg, "#vrDyn")) && /Sales tax is calculated by Airtable/.test(pvt + await text(pg, "#vrDyn")), "preview: per-person line is spelled out and tax is called out");
   await pg.selectOption("#vr_snorkel", "recVB|boat"); await pg.selectOption("#vr_gear", "recVA|set");
   ok(/alpha_gear_full_2027/.test(await text(pg, "#vrDyn")) && await pg.locator("#vrPrev").count() === 1, "preview: a gear-only change on a per-boat booking is listed as a rate change");
-  ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "no internal margin or total cost appears in the panel");
-  await pg.selectOption("#roleSel", "staff"); ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "staff view: panel carries no internal fields");
+  const internalRe = /777\.77|1,234\.50|33\.3|4,321\.09|555\.55|Net income|margin|Total program cost|Staff labor/i;
+  await pg.selectOption("#roleSel", "rose"); await pg.waitForSelector("#vrPanel"); ok(!internalRe.test(await text(pg, "#vrPanel")) && !internalRe.test(await text(pg, "#vrDyn")), "Pricing view: the panel shows vendor cost and the customer total only, never margin, net income or total program cost");
+  await pg.selectOption("#roleSel", "staff"); await pg.waitForSelector("#vrPanel"); ok(!internalRe.test(await text(pg, "#vrPanel")), "staff view: panel carries no internal fields");
+  ok(win.REEF_CONFIG.INTERNAL_KEYS.every(k => !(k in { vendorAuto: 1, pricingRates: 1, divers: 1, snorkelers: 1, vendorMissing: 1, total: 1 })), "the fields the panel reads (Vendor Costs, Total Package Price, Missing, counts, links) are not in INTERNAL_KEYS");
   await pg.close();
+  /* ---- Stage 5: Live, confirm box, guarded save ---- */
+  const resetRec = (id, fields) => { const r = bookings.find(x => x.id === id); Object.assign(r.fields, fields); };
+  const review = async (pg) => { await pg.click("#vrReview"); await pg.waitForSelector("#confirmDlg[open]"); return text(pg, "#confirmDlg"); };
+  pg = await open(br, url); await goTab(pg, ID.A); await live(pg); await goTab(pg, ID.A);
+  ok(await pg.locator("#vrReview").count() === 0, "Live: no Review button until something changes");
+  await pg.selectOption("#vr_snorkel", "recVA|pp");
+  ok(!(await pg.isDisabled("#vrReview")), "Live: Review change appears once a change is picked");
+  let dg = await review(pg);
+  ok(/Boat snorkel: bravo_snorkel_half_day_charter_2027 -> alpha_snorkel_pp_2027/.test(dg) && /Vendor costs\s*\$1,800\.00\s*\$1,325\.00/.test(dg) && /Total package price\s*\$10,000\.00\s*\$9,501\.25/.test(dg), "confirm box: category, old rate to new rate, and cost before and after");
+  ok(/no longer apply and are removed in this same save: bravo_snorkel_half_day_charter_2027, bravo_snorkel_gear_2027, bravo_snorkel_capacity/.test(dg), "confirm box: the leftover records are listed");
+  ok(/Snorkelers \(25\) fit Alpha Marine/.test(await text(pg, "#vrDyn")) && /Capacity warnings/.test(dg) && /2 boat trips/.test(dg) && !/over Alpha/.test(dg), "confirm box: capacity warnings are repeated (here only the per-trip split flag; 25 fit 30)");
+  ok(await pg.isDisabled("#cfSave") && /Pending vendor confirmation \(test record, no tick needed\)/.test(dg) && await pg.locator("#confirmDlg .vrAck").count() === 0, "confirm box: Save is disabled until a reason is typed; a ZZZ record needs no Pending tick");
+  await pg.fill("#cfReason", "too short"); ok(await pg.isDisabled("#cfSave"), "confirm box: a reason under 10 characters keeps Save disabled");
+  await pg.fill("#cfReason", "Test: pick Alpha for the boat snorkel");
+  afterPatch = (rec) => { rec.fields[f.total] = 9501.25; rec.fields[f.vendorAuto] = 1325; };
+  await pg.click("#cfSave"); await pg.waitForSelector("#vrVerify", { timeout: 20000 });
+  ok(patches.length === 1 && patches[0].id === ID.A && JSON.stringify(patches[0].body.fields[f.pricingRates]) === '["recR1"]' && Object.keys(patches[0].body.fields).length === 1 && patches[0].body.typecast === false, "save: ONE PATCH, the full Pricing Rates array [Alpha per person] (leftovers gone), typecast false");
+  ok(posts.length === 1 && posts[0].records[0].fields[win.ReefData ? "x" : "fldQPFJ8Rs7hawYJ0"] === "Other" && /Pricing Rates/.test(posts[0].records[0].fields.fldyfBpgjI99tPxqR), "save: one Communications Log row");
+  ok(/Airtable and the calculator agree/.test(await text(pg, "#vrSaved")) && /\$9,501\.25/.test(await text(pg, "#vrVerify")), "after save: re-reads Airtable and shows the recalculated total next to the mirror's");
+  ok(await pg.inputValue("#vr_snorkel") === "recVA|pp" && /alpha snorkel pp 2027/.test(await text(pg, "#vrPanel")), "after save: the panel shows the new link from Airtable");
+  // switch to a different vendor: no leftover record of the previous one
+  await pg.selectOption("#vr_snorkel", "recVD|pp"); dg = await review(pg); ok(/alpha_snorkel_pp_2027 -> delta_dives_snorkel_pp_2027/.test(dg) && !/no longer apply/.test(dg), "switch vendor (same model): old vendor replaced, no leftover notice");
+  await pg.fill("#cfReason", "Test: switch to the other vendor"); afterPatch = (rec) => { rec.fields[f.total] = 9999; rec.fields[f.vendorAuto] = 1; };
+  await pg.click("#cfSave"); await until(() => patches.length >= 2); await pg.waitForFunction(() => /9,999\.00/.test((document.querySelector("#vrVerify")||{}).textContent||""), null, { timeout: 20000 });
+  ok(JSON.stringify(patches[1].body.fields[f.pricingRates]) === '["recR12"]', "save: switching vendor leaves no record of the old vendor linked");
+  ok(/differs from the calculator/.test(await text(pg, "#vrSaved")), "after save: a difference between the mirror and Airtable is shown and attributed to Airtable");
+  // counts only
+  await pg.fill("#vr_divers", "6"); dg = await review(pg); ok(/# Divers<\/b>|# Divers: \(blank\) -> 6/.test(await pg.innerHTML("#vrCfList") ) || /# Divers/.test(dg), "counts: # Divers change opens the confirm box"); await pg.fill("#cfReason", "Test: six divers in the group");
+  afterPatch = null; await pg.click("#cfSave"); await until(() => patches.length >= 3); await pg.waitForFunction(() => /Checked \d+ time/.test((document.querySelector("#vrSaved")||{}).textContent||""), null, { timeout: 20000 });
+  ok(patches.length === 3 && JSON.stringify(Object.keys(patches[2].body.fields)) === JSON.stringify([f.divers]) && patches[2].body.fields[f.divers] === 6, "save: a counts-only save PATCHes only # Divers");
+  await pg.close();
+  resetRec(ID.A, { [f.pricingRates]: ["recR8", "recR10", "recR9"], [f.total]: 10000, [f.vendorAuto]: 1800 }); delete bookings.find(x => x.id === ID.A).fields[f.divers];
+  // approved
+  pg = await open(br, url); await goTab(pg, ID.APPR); await live(pg); await goTab(pg, ID.APPR); await pg.selectOption("#vr_snorkel", "recVA|pp");
+  ok(/Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished\./.test(await text(pg, "#vrDyn")), "approved: the un-approve warning shows in the panel");
+  dg = await review(pg); await pg.fill("#cfReason", "Test: approved booking vendor change");
+  ok(await pg.isDisabled("#cfSave") && await pg.locator("#confirmDlg .vrAck").count() === 1, "approved: Save stays disabled until the un-approve box is ticked");
+  await pg.check("#confirmDlg .vrAck"); afterPatch = rec => { rec.fields[f.approved] = false; rec.fields[f.propVer] = 2; rec.fields[f.total] = 1; };
+  ok(!(await pg.isDisabled("#cfSave")), "approved: ticking the box enables Save"); await pg.click("#cfSave"); await pg.waitForSelector("#vrSaved .note, #vrSaved .warn", { timeout: 20000 });
+  await pg.waitForFunction(() => /Observed in Airtable/.test(document.querySelector("#vrSaved").textContent), null, { timeout: 20000 });
+  ok(/Predicted: Approved to Share off, Proposal Version 2\. Observed in Airtable: Approved to Share off, Proposal Version 2\. ✓ As predicted/.test(await text(pg, "#vrSaved")), "approved: after save shows predicted vs observed approval and Proposal Version");
+  await pg.close(); afterPatch = null; resetRec(ID.APPR, { [f.approved]: false === 1, [f.propVer]: 1, [f.pricingRates]: ["recR8"], [f.total]: 10000 }); bookings.find(x => x.id === ID.APPR).fields[f.approved] = true;
+  pg = await open(br, url); await goTab(pg, ID.APPR); await live(pg); await goTab(pg, ID.APPR); await pg.fill("#vr_divers", "4");
+  ok(!/un-approve/.test(await text(pg, "#vrDyn")), "approved: # Divers alone says nothing about un-approving");
+  await pg.close();
+  // signed and legacy
+  for (const [id, re, nm] of [[ID.SIGNED, /Contract Status Signed/, "Signed"], [ID.LEGACY, /Legacy \(completed\)/, "Legacy (completed)"]]) {
+    pg = await open(br, url); await goTab(pg, id); await live(pg); await goTab(pg, id); await pg.selectOption("#vr_snorkel", "recVA|pp"); dg = await review(pg); await pg.fill("#cfReason", "Test: change on a locked booking");
+    ok(re.test(dg) && await pg.isDisabled("#cfSave") && await pg.locator("#confirmDlg .vrAck").count() === 1, nm + ": the extra explicit tick is required before Save");
+    await pg.check("#confirmDlg .vrAck"); ok(!(await pg.isDisabled("#cfSave")), nm + ": ticking it enables Save"); await pg.click("#cfCancel"); await pg.close();
+  }
+  patches.length = 0; posts.length = 0;
+  // real booking, test-only ON: blocked with the reason
+  pg = await open(br, url); await goTab(pg, ID.REAL); await live(pg); await goTab(pg, ID.REAL); await pg.selectOption("#vr_snorkel", "recVA|pp");
+  ok(await pg.isDisabled("#vrReview") && /Only ZZZ test records may be saved live right now/.test(await text(pg, "#vrBlock")), "WRITES_TEST_RECORDS_ONLY: a real booking cannot be saved live while the switch is on");
+  await pg.close();
+  // real booking, test-only OFF (served copy of config only): Pending needs the acknowledgment
+  pg = await open(br, urlOpen); await goTab(pg, ID.REAL); await live(pg); await goTab(pg, ID.REAL); await pg.selectOption("#vr_snorkel", "recVA|pp"); dg = await review(pg); await pg.fill("#cfReason", "Test: pending rate on a real booking");
+  ok(/Pending vendor confirmation: alpha_snorkel_pp_2027/.test(dg) && await pg.isDisabled("#cfSave") && await pg.locator("#confirmDlg .vrAck").count() === 1, "Pending: saving a pending rate on a real booking needs the acknowledgment tick");
+  await pg.check("#confirmDlg .vrAck"); ok(!(await pg.isDisabled("#cfSave")), "Pending: ticking it enables Save"); await pg.click("#cfCancel");
+  await pg.selectOption("#vr_snorkel", "recVD|pp"); dg = await review(pg); await pg.fill("#cfReason", "Test: confirmed rate on a real booking");
+  ok(await pg.locator("#confirmDlg .vrAck").count() === 0 && !(await pg.isDisabled("#cfSave")), "Pending: a confirmed rate on a real booking needs no tick"); await pg.click("#cfCancel");
+  ok(patches.length === 0, "nothing was written by the cancelled reviews"); await pg.close();
+  // idle / back to Sandbox hides the review button
+  pg = await open(br, url); await goTab(pg, ID.A); await live(pg); await goTab(pg, ID.A); await pg.selectOption("#vr_snorkel", "recVD|pp"); await pg.click("#mbBack");
+  ok(await pg.locator("#vrReview").count() === 0 && /Sandbox: nothing was saved/.test(await text(pg, "#vrDyn")), "Back to Sandbox: the Review button goes away and typed choices stay, marked not saved");
+  await pg.close();
+  // phone width, errors, no writes from sandbox/off builds
+  pg = await open(br, url); await goTab(pg, ID.A); await pg.setViewportSize({ width: 390, height: 900 }); await pg.selectOption("#vr_snorkel", "recVA|pp");
+  ok(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "phone width: the picker has no sideways scroll");
+  ok(pg.errs.length === 0, "no page errors in the picker" + pg.errs.join("|")); await pg.close();
+  const offUrl = "http://localhost:" + srvOff.address().port + "/"; patches.length = 0; pg = await open(br, offUrl); await goTab(pg, ID.A); await pg.selectOption("#vr_snorkel", "recVA|pp");
+  ok(await pg.isDisabled("#mbLive") && await pg.locator("#vrReview").count() === 0 && patches.length === 0, "writes-off build: Live switch disabled, no Review button, no write");
+  ok(await pg.evaluate(async () => { try { await ReefData._patch("tbl", "rec", {}); return false; } catch (e) { return /disabled|Not in Live/.test(e.message); } }), "writes-off build: the adapter write path still refuses");
+  await pg.close();
+  const cfgText = fs.readFileSync(path.join(root, "js/config.js"), "utf8");
+  ok(/WRITES_TEST_RECORDS_ONLY:\s*true/.test(cfgText) && !/EDITABLE:[\s\S]*pricingRates/.test(cfgText.split("EDIT_GROUPS")[0].split("EDITABLE:")[1] || ""), "config: WRITES_TEST_RECORDS_ONLY still true; Pricing Rates is not in EDITABLE");
   // ==== END OF STAGES ====
   await br.close(); srv.close(); srvOpen.close(); srvOff.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
 })();

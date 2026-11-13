@@ -285,5 +285,36 @@ window.ReefVendors = (function () {
     return { available: true, before: s0, after: s1, delta, vendorBefore: stored, vendorAfter, totalBefore: total, totalAfter, factor, manual, notes, expectedTotal: totalAfter };
   }
 
-  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots, initialChoice, plan, capacity, parseCount, mirrorRates, preview };
+
+  /* ---------- the guarded write ---------- */
+  /* The only place this feature writes. Every gate must pass or it throws before anything is sent. Same gates as ReefEdits.commit, plus: only the
+     three allowlisted fields, every required tick box, and the booking's links unchanged since the plan was made.
+     Returns {saved, logOk, logError, log}. The change log is the shared ReefEdits.writeChangeLog (one Communications Log row). */
+  async function commit(booking, p, o) {
+    o = o || {}; const D = window.ReefData, M = window.ReefMode, E = window.ReefEdits;
+    if (o.mode !== "live" || !M || !M.isLive()) throw new Error("Not in Live mode: nothing is saved from Sandbox.");
+    if (o.confirmed !== true) throw new Error("The change was not confirmed.");
+    if (String(o.reason || "").trim().length < E.MIN_REASON) throw new Error("A reason of at least " + E.MIN_REASON + " characters is required.");
+    if (!p || !p.ok) throw new Error("Plan is not valid");
+    if (!C.WRITES_ENABLED) throw new Error("Live editing is not switched on yet (writes are disabled in this build).");
+    if (C.WRITES_TEST_RECORDS_ONLY && !String(booking.raw[F.name] || "").startsWith(C.TEST_PREFIX)) throw new Error("Only " + C.TEST_PREFIX + " test records may be saved live right now.");
+    const caps = D.hasToken() ? D.capabilities() : null;
+    if (!caps || caps.canWrite === false) throw new Error("Your token cannot write. Ask Martha for a write token.");
+    const allowed = ALLOWLIST.map(k => F[k]);
+    if (Object.keys(p.fields).some(k => !allowed.includes(k))) throw new Error("Internal error: field not on the vendor picker allowlist.");
+    if ((p.acks || []).some(a => !(o.acks || []).includes(a.id))) throw new Error("Every tick box in the confirmation must be ticked.");
+    const fresh = await D.getBooking(booking.id);
+    if (!fresh || (fresh.fields[F.modified] || null) !== p.baseModified) throw new Error("Someone changed this booking since you opened it. Reload and re-apply.");
+    if (p.changedRates) {
+      const now = linked({ raw: fresh.fields }).slice().sort().join();
+      if (now !== p.links.before.slice().sort().join()) throw new Error("The linked rates changed in Airtable since you opened this booking. Reload and re-apply.");
+      if (!Array.isArray(p.fields[F.pricingRates]) || p.fields[F.pricingRates].some(id => typeof id !== "string" || !/^rec/.test(id))) throw new Error("Internal error: Pricing Rates must be a list of record IDs.");
+    }
+    await D._patch(C.T.bookings, booking.id, p.fields);   // the one write: the full Pricing Rates array and/or the two counts. If this throws nothing else runs.
+    const user = o.user || caps.user, res = { saved: true, logOk: true, logError: null, log: E.buildLog(p, { reason: o.reason, user }) };
+    try { await E.writeChangeLog(booking, p, { reason: o.reason, user }); } catch (e) { res.logOk = false; res.logError = e.message; }
+    return res;
+  }
+
+  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots, initialChoice, plan, capacity, parseCount, mirrorRates, preview, commit };
 })();

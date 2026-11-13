@@ -140,5 +140,68 @@ pv = V.preview(B(["recR1"], { [F.total]: 5000 }), idx, P(B(["recR1"]), { snorkel
 const noCapIdx = V.index({ rates: FX.rates.filter(r => r.id !== "recR9"), vendors: FX.vendors, activities: FX.activities });
 pv = V.preview(B(["recR1"], { [F.total]: 5000 }), noCapIdx, V.plan(B(["recR1"]), noCapIdx, { choices: { snorkel: "recVB|boat" } }), fakeP, inp); ok(!pv.available && /capacity per vessel/.test(pv.reason), "preview: per-boat vendor with no capacity record is flagged, not guessed");
 
-module.exports = { w, V, idx, FX, ok, results: () => ({ pass, fail }) };
-if (require.main === module) { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }
+(async () => {
+/* ---- Stage 5: guarded write (fetch mocked, no network) ---- */
+function harness(cfgOver) {
+  const calls = [], st = { scopes: ["data.records:read", "data.records:write"], rec: null, failLog: false, failPatch: false };
+  const Rr = (j, status) => ({ ok: (status || 200) < 400, status: status || 200, json: async () => j });
+  const ctx = { console, window: {}, setTimeout, clearTimeout, setInterval: () => 1, clearInterval: () => {},
+    fetch: async (url, init) => { init = init || {}; const body = init.body ? JSON.parse(init.body) : null, method = init.method || "GET"; calls.push({ method, url, body });
+      if (/meta\/whoami/.test(url)) return Rr({ id: "usrX", email: "rose@example.org", scopes: st.scopes });
+      if (/listRecords/.test(url)) return Rr({ records: st.rec ? [st.rec] : [] });
+      if (method === "PATCH") return st.failPatch ? Rr({ error: { type: "INVALID", message: "boom" } }, 422) : Rr({ id: st.rec.id, fields: body.fields });
+      if (method === "POST") return st.failLog ? Rr({ error: { type: "INVALID", message: "log boom" } }, 422) : Rr({ records: [{ id: "recLOG" }] });
+      return Rr({}, 404); } };
+  vm.createContext(ctx);
+  for (const fl of ["config", "mode", "adapter-airtable", "pricing", "edits", "vendors"]) vm.runInContext(fs.readFileSync(path.join(root, "js", fl + ".js"), "utf8"), ctx);
+  const hw = ctx.window; if (cfgOver) Object.assign(hw.REEF_CONFIG, cfgOver);
+  const hi = hw.ReefVendors.index({ rates: FX.rates, vendors: FX.vendors, activities: FX.activities });
+  const set = (links, extra) => { const raw = Object.assign({ [F.name]: "ZZZ Gate", [F.arrival]: "2027-05-01", [F.students]: 20, [F.chaps]: 5, [F.boatTrips]: 2, [F.approved]: false, [F.propVer]: 1, [F.modified]: "2026-11-02T00:00:00.000Z", [F.pricingRates]: links }, extra || {}); st.rec = { id: "recZZZ0000000001", fields: Object.assign({}, raw) }; return { id: st.rec.id, raw, actNames: ["Boat Snorkel"] }; };
+  const writes = () => calls.filter(c => c.method === "PATCH" || (c.method === "POST" && !/listRecords/.test(c.url)));
+  const goLive = async () => { hw.ReefData.setToken("pat_TEST"); await hw.ReefData.verify(); return hw.ReefMode.requestLive(); };
+  return { hw, st, calls, set, writes, goLive, hi, plan: (b, ch, co) => hw.ReefVendors.plan(b, hi, { choices: ch || {}, counts: co || {} }) };
+}
+const rejects = async (fn, re) => { try { await fn(); return false; } catch (e) { return re.test(e.message); } };
+const LIVE = (o) => Object.assign({ mode: "live", confirmed: true, reason: "Vendor sheet received for 2027", user: "rose@example.org" }, o);
+const gate = async (label, re, o) => { o = o || {}; const g = harness(Object.assign({ WRITES_ENABLED: true, WRITES_TEST_RECORDS_ONLY: true }, o.cfg)); const b = g.set(["recR8", "recR10"], o.extra && o.extra.raw); if (o.name) { b.raw[g.hw.REEF_CONFIG.F.name] = o.name; g.st.rec.fields[g.hw.REEF_CONFIG.F.name] = o.name; }
+  await g.goLive(); const pl = g.plan(b, o.choices || { snorkel: "recVA|pp" }, o.counts); if (o.setup) await o.setup(g, b, pl);
+  const r = await rejects(() => g.hw.ReefVendors.commit(b, o.plan ? o.plan(pl) : pl, LIVE(o.opts)), re); ok(r && g.writes().length === 0, "commit gate: " + label + " throws and sends no write"); };
+{
+  await gate("not in Live mode", /Not in Live mode/, { setup: g => g.hw.ReefMode.toSandbox("t") });
+  await gate("opts.mode is not live", /Not in Live mode/, { opts: { mode: "sandbox" } });
+  await gate("not confirmed", /not confirmed/, { opts: { confirmed: "yes" } });
+  await gate("reason too short", /reason of at least 10/, { opts: { reason: "short" } });
+  await gate("no change in the plan", /Plan is not valid/, { choices: {} });
+  await gate("writes disabled", /not switched on/, { setup: g => { g.hw.REEF_CONFIG.WRITES_ENABLED = false; } });
+  await gate("non-ZZZ record while test-only is on", /Only ZZZ test records/, { name: "Real School" });
+  await gate("record changed since load", /Someone changed this booking/, { setup: g => { g.st.rec.fields[F.modified] = "2026-11-09T00:00:00.000Z"; } });
+  await gate("linked rates changed since load", /linked rates changed/, { setup: g => { g.st.rec.fields[F.pricingRates] = ["recR8"]; } });
+  await gate("token cannot write", /cannot write/, { setup: g => { g.st.scopes = ["data.records:read"]; return g.hw.ReefData.verify(); } });
+  await gate("a required tick box is missing", /tick box/, { extra: { raw: { [F.approved]: true } }, opts: { acks: [] } });
+  await gate("a field outside the allowlist", /allowlist/, { plan: pl => Object.assign({}, pl, { fields: Object.assign({}, pl.fields, { [F.total]: 1 }) }) });
+  await gate("a field outside the allowlist (Proposal Version)", /allowlist/, { plan: pl => Object.assign({}, pl, { fields: { [F.propVer]: 9 } }) });
+  await gate("Pricing Rates that are not record IDs", /record IDs/, { plan: pl => Object.assign({}, pl, { fields: { [F.pricingRates]: ["Pirates"] } }) });
+}
+let g = harness({ WRITES_ENABLED: true }), gb = g.set(["recR8", "recR10", "recR9"]); await g.goLive();
+let gp = g.plan(gb, { snorkel: "recVA|pp" }, { divers: "12" });
+let gr = await g.hw.ReefVendors.commit(gb, gp, LIVE());
+const W = g.writes(), pt = W.find(c => c.method === "PATCH"), lg = W.find(c => c.method === "POST");
+ok(W.length === 2 && gr.saved && gr.logOk, "commit: exactly one PATCH and one log row");
+ok(pt.body.typecast === false && JSON.stringify(Object.keys(pt.body.fields).sort()) === JSON.stringify([F.pricingRates, F.divers].sort()) && JSON.stringify(pt.body.fields[F.pricingRates]) === '["recR1"]' && pt.body.fields[F.divers] === 12, "commit: PATCH sends the full Pricing Rates array and # Divers, nothing else, typecast false");
+ok(pt.url.endsWith("/" + C.T.bookings + "/recZZZ0000000001"), "commit: the PATCH goes to the one booking");
+const lf = lg.body.records[0].fields, XC = g.hw.ReefData.FX.comms;
+ok(lf[XC.what] === "Other" && lf[XC.summary] === "App edit: Pricing Rates, # Divers" && lf[XC.booking][0] === gb.id && /Reason: Vendor sheet received for 2027/.test(lf[XC.details]) && /Pricing Rates: bravo_snorkel_half_day_charter_2027, bravo_snorkel_gear_2027, bravo_snorkel_capacity -> alpha_snorkel_pp_2027/.test(lf[XC.details]) && /# Divers: \(blank\) -> 12/.test(lf[XC.details]) && /Edited by: rose@example\.org/.test(lf[XC.details]), "change log: Communications Log row with who, before and after, and the reason");
+g = harness({ WRITES_ENABLED: true }); gb = g.set(["recR8"]); await g.goLive(); g.st.failLog = true;
+gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, { snorkel: "recVA|pp" }), LIVE());
+ok(gr.saved && !gr.logOk && /log boom/.test(gr.logError) && /Reason: Vendor sheet/.test(gr.log.details), "partial failure: PATCH ok but log fails reports it with the exact log text to copy");
+g = harness({ WRITES_ENABLED: true }); gb = g.set(["recR8"]); await g.goLive(); g.st.failPatch = true;
+ok(await rejects(() => g.hw.ReefVendors.commit(gb, g.plan(gb, { snorkel: "recVA|pp" }), LIVE()), /Airtable 422/) && g.writes().length === 1, "partial failure: PATCH fails, the error surfaces and no log row is written");
+g = harness({ WRITES_ENABLED: true }); gb = g.set([], { [F.approved]: true }); await g.goLive();
+gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, { snorkel: "recVD|pp" }), LIVE({ acks: ["approve"] })); ok(gr.saved && g.writes().length === 2, "commit: an approved booking saves once its un-approve tick is given");
+g = harness({ WRITES_ENABLED: true }); gb = g.set([], { [F.approved]: true }); await g.goLive();
+gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, {}, { divers: "4" }), LIVE()); ok(gr.saved && JSON.stringify(Object.keys(g.writes()[0].body.fields)) === JSON.stringify([F.divers]), "commit: a counts-only save on an approved booking needs no un-approve tick and writes only # Divers");
+ok(/typecast:\s*false/.test(fs.readFileSync(path.join(root, "js/adapter-airtable.js"), "utf8")) && !/_patch|_create|fetch\(/.test(fs.readFileSync(path.join(root, "js/vendors.js"), "utf8").replace(/D\._patch\(C\.T\.bookings, booking\.id, p\.fields\)/, "")), "vendors.js has no second write path (its only write is the shared D._patch, and it never calls fetch)");
+
+
+  console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
+})().catch(e => { console.log("FAIL unexpected error: " + e.stack); process.exit(1); });

@@ -284,17 +284,19 @@
         ${p.switched ? `<div class="warn" id="vrSwitch"><b>Switching ${p.switched.from === "pp" ? "per person to per boat" : "per boat to per person"}.</b> These rate records no longer apply and will be removed in the same save: ${p.leftover.map(r => esc(r.key)).join(", ")}.</div>` : ""}
         ${p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("")}${vrPreview(b, p)}`;
     }
-    return errs + chg + capHtml;
+    const live = M.isLive(), av = M.availability();
+    const act = p.diff.length ? (live ? `<p><button class="btn live" type="button" id="vrReview"${av.ok && p.ok && !p.writeBlockedBy ? "" : " disabled"}>Review change</button> ${p.writeBlockedBy ? `<span class="note" id="vrBlock">${esc(p.writeBlockedBy)}.</span>` : ""}</p>` : '<div class="note" id="vrSandboxNote"><b>Sandbox: nothing was saved.</b> This is only what the change would do. Switch to Live (top bar) to save.</div>') : "";
+    return errs + chg + capHtml + act;
   }
   /* Cost preview, staff only: Vendor Costs and Total Package Price before and after (the "before" is Airtable's stored value). */
-  function vrPreview(b, p) {
+  function vrPreview(b, p, idSuffix) {
     if (!p.changedRates) return "";
     if (!P.isReady()) return '<div class="note">Price preview unavailable: the Rates table constants are not loaded. Airtable still recalculates the real price.</div>';
     const pv = V.preview(b, S.vidx, p, P, inputsOf(b));
-    if (!pv.available) return `<div class="warn" id="vrPrev">${esc(pv.reason)}</div>${(pv.notes || []).map(n => `<div class="note">${esc(n)}</div>`).join("")}`;
+    if (!pv.available) return `<div class="warn" id="vrPrev${idSuffix || ""}">${esc(pv.reason)}</div>${(pv.notes || []).map(n => `<div class="note">${esc(n)}</div>`).join("")}`;
     const line = x => x.model === "pp" ? `${x.people} people × ${money2(x.rate)} × ${x.trips} trip${x.trips === 1 ? "" : "s"} = ${money2(x.cost)}` : x.model === "boat" ? `${x.departures} departures × ${money2(x.rate)} + gear ${money2(x.gearC)} = ${money2(x.cost)}` : "no snorkel rate linked";
     const row = (l, a, c) => `<tr><td>${l}</td><td class="num">${a == null ? "—" : money2(a)}</td><td class="num">${c == null ? "—" : money2(c)}</td><td class="num ${c - a > 0.004 ? "delta-up" : c - a < -0.004 ? "delta-dn" : ""}">${a == null || c == null ? "—" : delta(c - a)}</td></tr>`;
-    return `<table class="pricecmp" id="vrPrev"><caption class="note">Cost preview (calculator estimate; Airtable's recalculated figure is the real one)</caption><tr><th>Line</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr>
+    return `<table class="pricecmp" id="vrPrev${idSuffix || ""}"><caption class="note">Cost preview (calculator estimate; Airtable's recalculated figure is the real one)</caption><tr><th>Line</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr>
       ${row("Vendor costs", pv.vendorBefore, pv.vendorAfter)}${row("Total package price", pv.totalBefore, pv.totalAfter)}</table>
       <div class="small">Snorkel before: ${esc(line(pv.before))}. After: ${esc(line(pv.after))}.</div>
       <div class="note">Sales tax is calculated by Airtable and is not part of this comparison. Gratuities do not change with the vendor.</div>${pv.notes.map(n => `<div class="note">${esc(n)}</div>`).join("")}`;
@@ -317,7 +319,7 @@
         <div class="ctl"><label for="vr_divers">${esc(C.VENDOR_PICKER.COUNTS.divers.label)}</label><input id="vr_divers" data-vc="divers" inputmode="numeric" value="${esc(vrCountVal(b, "divers"))}"><span class="note">Blank means not set.</span></div></div>
       <div id="vrDyn" role="status">${vrDyn(b)}</div>
       <p><button class="btn alt" type="button" id="vrReset"${Object.keys(st.choices).length + Object.keys(st.counts).length ? "" : " hidden"}>Discard choices</button></p>
-      <div id="vrResult">${""}</div></div>`;
+      <div id="vrResult">${vrResultHtml(b.id)}</div></div>`;
   }
   function wireVr() {
     const b = cur(); if (!b || !$("vrPanel")) return; const st = vpOf(b), arrival = String(b.g("arrival") || "").slice(0, 10) || null;
@@ -326,6 +328,64 @@
     document.querySelectorAll("#vrPanel input[data-vc]").forEach(e => e.oninput = () => { const k = e.dataset.vc, o = b.raw[F[k]] == null ? "" : String(b.raw[F[k]]); if (e.value === o) delete st.counts[k]; else st.counts[k] = e.value; $("vrDyn").innerHTML = vrDyn(b); const rs = $("vrReset"); if (rs) rs.hidden = !(Object.keys(st.choices).length + Object.keys(st.counts).length); });
     $("vrAll").onchange = e => { st.showAll = e.target.checked; repaint("vrAll"); };
     $("vrReset").onclick = () => { delete S.vp[b.id]; repaint(); };
+    $("vrPanel").addEventListener("click", ev => { const t = ev.target; if (t && t.id === "vrReview" && !t.disabled) { const p = vrPlan(b); if (p.ok && !p.writeBlockedBy) openVrConfirm(b, p); } });
+  }
+  /* ---------- confirmation box and guarded save (Live only) ---------- */
+  function openVrConfirm(b, p) {
+    const dlg = $("confirmDlg"), st = vpOf(b), cap = V.capacity(b, S.vidx, p.links.after, st.counts), cur0 = V.current(b, S.vidx), cur1 = V.current({ raw: { [F.pricingRates]: p.links.after } }, S.vidx);
+    const keys = list => list.length ? list.map(r => esc(r.key)).join(", ") : "(none)";
+    const cats = p.changedSlots.map(sl => `<li><b>${esc(V.SLOT_LABEL[sl])}</b>: ${keys(cur0.by[sl])} -&gt; ${keys(cur1.by[sl])}</li>`).join("");
+    const cnt = p.diff.filter(d => d.key !== "pricingRates").map(d => `<li><b>${esc(d.label)}</b>: ${esc(show(d.before))} -&gt; ${esc(show(d.after))}</li>`).join("");
+    dlg.innerHTML = `<div class="dlg-body"><h3 id="cfTitle">Review live change</h3><p class="lead">${esc(b.g("name"))}</p>
+      <h4>What is changing</h4><ul class="chg-list" id="vrCfList">${cats}${cnt}</ul>
+      ${p.switched ? `<div class="warn">Switching ${p.switched.from === "pp" ? "per person to per boat" : "per boat to per person"}. These rate records no longer apply and are removed in this same save: ${p.leftover.map(r => esc(r.key)).join(", ")}.</div>` : ""}
+      ${p.changedRates ? `<h4>Cost before and after</h4>${vrPreview(b, p, "Dlg")}` : ""}
+      ${cap.items.filter(i => i.level === "amber").length ? `<h4>Capacity warnings <span class="note">(they do not block saving)</span></h4>${cap.items.filter(i => i.level === "amber").map(i => `<div class="vr-amberbox">⚠ ${esc(i.text)}</div>`).join("")}` : ""}
+      <h4>What happens next</h4>${p.warnings.length ? p.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join("") : '<div class="note">No approval effects expected. It saves to Airtable and is logged in the Communications Log. Nothing is sent to a vendor or a school.</div>'}
+      <label class="ctl" for="cfReason"><b>Reason for this change (required, at least ${E.MIN_REASON} characters)</b></label><textarea id="cfReason" rows="2" placeholder="e.g. Vendor sheet received, booked Alpha for the boat snorkel" aria-describedby="cfCount"></textarea><div class="note" id="cfCount">0 characters (${E.MIN_REASON} more needed)</div>
+      ${p.acks.map(a => `<label class="chk"><input type="checkbox" class="vrAck" data-id="${esc(a.id)}"> ${esc(a.label)}</label>`).join("")}
+      <div id="cfErr" class="warnred" role="alert" hidden></div></div>
+      <div class="dlg-foot"><button class="btn alt" type="button" id="cfCancel">Cancel</button><button class="btn live" type="button" id="cfSave" disabled>Save live change</button></div>`;
+    dlg.setAttribute("aria-labelledby", "cfTitle");
+    const reason = $("cfReason"), save = $("cfSave"), boxes = () => Array.from(dlg.querySelectorAll(".vrAck"));
+    const ready = () => { const n = reason.value.trim().length; $("cfCount").textContent = n >= E.MIN_REASON ? n + " characters" : n + " characters (" + (E.MIN_REASON - n) + " more needed)"; save.disabled = S.saving || n < E.MIN_REASON || boxes().some(x => !x.checked); };
+    reason.oninput = ready; boxes().forEach(x => x.onchange = ready);
+    $("cfCancel").onclick = () => dlg.close(); dlg.oncancel = e => { if (S.saving) e.preventDefault(); };
+    save.onclick = async () => {
+      if (S.saving || save.disabled) return;
+      S.saving = true; save.disabled = true; save.textContent = "Saving..."; $("cfCancel").disabled = true; $("cfErr").hidden = true;
+      try { await doVrSave(b, p, reason.value.trim(), boxes().filter(x => x.checked).map(x => x.dataset.id)); dlg.close(); }
+      catch (e) { S.saving = false; $("cfErr").textContent = "Not saved: " + e.message; $("cfErr").hidden = false; save.textContent = "Save live change"; $("cfCancel").disabled = false; ready(); }
+    };
+    dlg.showModal(); reason.focus();
+  }
+  const vrPaint = bid => { if (S.view === "booking" && S.bid === bid && S.tab === "vendors" && $("vrPanel")) { $("vrPanel").outerHTML = vrPanel(cur()); wireVr(); } };
+  async function doVrSave(b, p, reason, acks) {
+    const bid = b.id, name = b.g("name"), rows = p.diff.map(d => ({ label: d.label, before: d.before, after: d.after }));
+    const pv = p.changedRates && P.isReady() ? V.preview(b, S.vidx, p, P, inputsOf(b)) : null, expected = pv && pv.available ? pv.expectedTotal : null;
+    const res = await V.commit(b, p, { mode: "live", confirmed: true, reason, acks, user: (S.caps || {}).user });   // throws before anything is sent unless every gate passes
+    S.savedAt = Date.now(); S.saving = false; delete S.vp[bid]; S.recent.unshift({ name, rows, reason, at: new Date() });
+    S.vpres[bid] = { res, p, pv, v: null };
+    try { replaceBooking(await D.getBooking(bid)); } catch (e) { /* the verify loop below reads again */ }
+    vrPaint(bid);
+    E.verifyAfterSave({ read: () => D.getBooking(bid), expectedTotal: expected, predicted: p.predicted, onRead: replaceBooking })
+      .then(v => { S.vpres[bid] = { res, p, pv, v }; S.savedAt = Date.now(); vrPaint(bid); })
+      .catch(e => { S.vpres[bid] = { res, p, pv, v: { rec: null, readError: e.message, attempts: 0, expectedTotal: null, observed: {}, predicted: p.predicted } }; vrPaint(bid); });
+    return res;
+  }
+  function vrResultHtml(bid) {
+    const r = S.vpres[bid]; if (!r) return "";
+    const fm = x => x == null ? "—" : money2(x);
+    const lg = r.res.logOk ? "" : `<div class="warnred" role="alert"><strong>Saved to Airtable, but the log entry failed.</strong> Error: ${esc(r.res.logError)}<br>Copy this text and paste it into the Communications Log by hand:<textarea readonly rows="6" id="logText">${esc(r.res.log.summary + "\n" + r.res.log.details)}</textarea><button class="btn alt" type="button" id="copyLog">Copy log text</button> <span id="copied" class="note" role="status"></span></div>`;
+    if (!r.v) return `<div class="card" id="vrSaved"><h3>Saved ${chip("ok", "SAVED")}</h3>${lg}<div class="note" role="status">Checking Airtable's recalculated total…</div></div>`;
+    const v = r.v, pr = r.p, b = S.bookings.find(x => x.id === bid), vcNow = b && typeof b.g("vendorAuto") === "number" ? b.g("vendorAuto") : null;
+    let tot;
+    if (v.readError && !v.rec) tot = `<div class="warn">Saved, but Airtable could not be re-read to verify (${esc(v.readError)}). Press Refresh from Airtable.</div>`;
+    else if (v.expectedTotal == null) tot = `<div class="warn">The calculator could not predict a price for this change. Airtable's recalculated total is ${fm(v.airtableTotal)}${vcNow != null ? " and Vendor Costs " + fm(vcNow) : ""}.</div>`;
+    else tot = `<table id="vrVerify"><tr><td>Airtable's recalculated total</td><td class="num">${fm(v.airtableTotal)}</td></tr><tr><td>Calculator's expected total</td><td class="num">${fm(v.expectedTotal)}</td></tr><tr class="tot"><td>Difference</td><td class="num">${v.diff == null ? "—" : money2(v.diff)}</td></tr>${vcNow != null && r.pv && r.pv.available ? `<tr><td>Airtable Vendor Costs now / expected</td><td class="num">${fm(vcNow)} / ${fm(r.pv.vendorAfter)}</td></tr>` : ""}</table>
+      ${v.match ? '<div class="note">✓ Airtable and the calculator agree.</div>' : `<div class="warnred" role="alert">Airtable's total differs from the calculator by ${v.diff == null ? "an unknown amount" : money2(Math.abs(v.diff))}. Airtable is correct; tell Martha so the calculator can be fixed.</div>`}`;
+    const watch = pr.unapproves ? `<div class="${v.predictedMatch ? "note" : "warn"}" role="status">Predicted: Approved to Share ${pr.predicted.approved ? "on" : "off"}, Proposal Version ${pr.predicted.propVer}. Observed in Airtable: Approved to Share ${v.observed.approved ? "on" : "off"}, Proposal Version ${v.observed.propVer == null ? "—" : v.observed.propVer}. ${v.predictedMatch ? "✓ As predicted." : "These do not match what was predicted. Check the booking in Airtable and tell Martha."}</div>` : "";
+    return `<div class="card" id="vrSaved"><h3>Saved ${chip("ok", "SAVED")}</h3>${lg}${tot}${watch}<div class="note">Checked ${v.attempts} time${v.attempts === 1 ? "" : "s"}. Nothing was sent to a vendor or a school.</div></div>`;
   }
   function wireVendors() {
     const b = cur(), base = inputsOf(b), r00 = P.calc(base, {}), X = D.FX.vendors, XR = D.FX.rates, r0 = r00, gd = r00.gearIncluded ? 0 : P.R.gear;
