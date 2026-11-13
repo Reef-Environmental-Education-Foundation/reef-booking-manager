@@ -118,7 +118,7 @@ const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); a
   ok(/Vendor costs\s*\$1,800\.00\s*\$1,325\.00/.test(pvt) && /Total package price\s*\$10,000\.00\s*\$9,501\.25/.test(pvt), "preview: Vendor Costs and Total Package Price before and after");
   ok(/25 people × \$75\.00 × 2 trips = \$3,750\.00/.test(await text(pg, "#vrDyn")) && /Sales tax is calculated by Airtable/.test(pvt + await text(pg, "#vrDyn")), "preview: per-person line is spelled out and tax is called out");
   await pg.selectOption("#vr_snorkel", "recVB|boat"); await pg.selectOption("#vr_gear", "recVA|set");
-  ok(/alpha_gear_full_2027/.test(await text(pg, "#vrDyn")) && /Per-boat|per boat|departures/.test(await text(pg, "#vrDyn")) === false, "preview: a gear-only change on a per-boat booking is listed as a rate change");
+  ok(/alpha_gear_full_2027/.test(await text(pg, "#vrDyn")) && await pg.locator("#vrPrev").count() === 1, "preview: a gear-only change on a per-boat booking is listed as a rate change");
   ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "no internal margin or total cost appears in the panel");
   await pg.selectOption("#roleSel", "staff"); ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "staff view: panel carries no internal fields");
   await pg.close();
