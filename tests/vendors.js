@@ -111,5 +111,34 @@ c = CAP(["recR1"], { [F.boatTrips]: 1 }); ok(!/trips/.test(kinds(c)), "capacity:
 c = CAP([], { [F.boatTrips]: 1 }); ok(/none/.test(kinds(c)) && !c.hasAmber, "capacity: no vendor chosen is an info line, not a warning");
 ok(JSON.stringify(V.parseCount("")) === '{"blank":true,"value":null}' && V.parseCount("7").value === 7 && V.parseCount("x").bad, "counts: blank means not set");
 
+/* ---- Stage 4: pricing mirror and cost preview ---- */
+const PR = w.ReefPricing, sv = (i, x) => PR.snorkelVendor(Object.assign({ students: 20, chaps: 5, staff: 2, trips: 2, acts: "Boat Snorkel" }, i), x);
+ok(sv({}, { pp: 75 }).cost === 3750 && sv({}, { pp: 75 }).model === "pp", "mirror: per-person snorkel, 75 per person, 20 students + 5 chaperones, 2 trips = 3,750 (REEF staff free)");
+ok(sv({ staff: 9 }, { pp: 75 }).cost === 3750, "mirror: per-person cost does not change with REEF staff aboard");
+ok(sv({ trips: 0 }, { pp: 75 }).cost === 1875, "mirror: zero trips count as one, as in Airtable");
+ok(sv({}, { charter: 900, cap: 15, gear: 25 }).cost === 4 * 900 + 25 * 25 && sv({}, { charter: 900, cap: 15, gear: 25 }).departures === 4, "mirror: per-boat charter, ceil(27 aboard / 15) x 2 trips = 4 departures x 900 + 25 people x 25 gear = 4,225");
+ok(sv({}, { charter: 900, cap: 15 }).cost === 3600, "mirror: per-boat with no gear linked adds no gear");
+ok(sv({}, { charter: 900 }).incomplete.join() === "capacity per vessel" && sv({}, { charter: 900 }).cost === 0, "mirror: per-boat with no capacity on file is incomplete, not guessed");
+ok(sv({}, { pp: 75, charter: 900, cap: 15, gear: 25 }).model === "pp" && sv({}, { pp: 75, charter: 900, cap: 15, gear: 25 }).cost === 3750, "mirror: when a per-person rate is linked it is the vendor cost (no charter or gear added)");
+ok(sv({ acts: "Kayaking" }, { pp: 75 }).cost === 0 && sv({}, {}).model === "none", "mirror: no Boat Snorkel activity, or no rate, means no snorkel vendor cost");
+const mr = ids2 => V.mirrorRates(idx, ids2);
+ok(mr(["recR1", "recR12"]).pp === 80 && mr(["recR8", "recR11"]).charter === 900 && mr(["recR8"]).cap === 15 && mr(["recR8", "recR10"]).gear === 25, "mirror rates: the highest linked rate of each kind (as Airtable's rollups), vendor capacity for per-boat");
+const fakeP = { isReady: () => true, R: { uplift: 0.05 }, snorkelVendor: PR.snorkelVendor };
+const inp = { students: 20, chaps: 5, staff: 0, trips: 2, acts: "Boat Snorkel" };
+const bb = B(["recR8", "recR10", "recR9"], { [F.total]: 10000, [F.vendorAuto]: 1800 });
+let pv = V.preview(bb, idx, P(bb, { snorkel: "recVA|pp" }), fakeP, inp);
+ok(pv.available && pv.before.cost === 4225 && pv.after.cost === 3750 && pv.delta === -475 && pv.vendorAfter === 1325 && pv.totalAfter === 9501.25 && pv.expectedTotal === 9501.25, "preview: per-boat to per-person: vendor cost 1,800 -> 1,325 and total 10,000 -> 9,501.25 (uplift 5% on the change)");
+pv = V.preview(bb, idx, P(bb, { snorkel: "recVA|pp" }), Object.assign({}, fakeP, { R: { uplift: 0.05 } }), Object.assign({}, inp, { acts: "Kayaking" }));
+ok(pv.available && pv.delta === 0 && pv.totalAfter === 10000, "preview: a booking without the Boat Snorkel activity shows no change");
+pv = V.preview(B(["recR1"], { [F.total]: 5000, [F.vendorAuto]: 3750, [F.manualVendorEst]: 4000 }), idx, P(B(["recR1"]), { snorkel: "recVD|pp" }), fakeP, inp);
+ok(pv.available && pv.delta === 250 && pv.totalAfter === 5000 && /manual Estimated Vendor Cost/.test(pv.notes.join()), "preview: a manual vendor estimate keeps the total and says so");
+pv = V.preview(bb, idx, P(bb, { snorkel: "recVB|boat" }), fakeP, inp); ok(!pv.available, "preview: no rate change, no preview");
+pv = V.preview(B(["recR1"], { [F.total]: 5000 }), idx, P(B(["recR1"]), { snorkel: "recVB|boat" }), fakeP, inp); ok(pv.available && pv.after.cost === 3600 && pv.delta === -150, "preview: per-person to per-boat (no gear linked yet) 3,750 -> 3,600");
+pv = V.preview(bb, idx, P(bb, { dive: "recVA|set" }), fakeP, inp); ok(pv.available && pv.delta === 0 && /Boat dive.*not priced in this preview/i.test(pv.notes.join()), "preview: dive changes are not priced and the preview says so");
+pv = V.preview(bb, idx, P(bb, { snorkel: "recVA|pp" }), { isReady: () => false }, inp); ok(!pv.available && /not loaded/.test(pv.reason), "preview: unavailable when the Rates constants are not loaded");
+pv = V.preview(B(["recR1"], { [F.total]: 5000 }), idx, P(B(["recR1"]), { snorkel: "recVB|boat" }), fakeP, inp);
+const noCapIdx = V.index({ rates: FX.rates.filter(r => r.id !== "recR9"), vendors: FX.vendors, activities: FX.activities });
+pv = V.preview(B(["recR1"], { [F.total]: 5000 }), noCapIdx, V.plan(B(["recR1"]), noCapIdx, { choices: { snorkel: "recVB|boat" } }), fakeP, inp); ok(!pv.available && /capacity per vessel/.test(pv.reason), "preview: per-boat vendor with no capacity record is flagged, not guessed");
+
 module.exports = { w, V, idx, FX, ok, results: () => ({ pass, fail }) };
 if (require.main === module) { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }

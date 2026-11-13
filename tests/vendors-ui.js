@@ -80,7 +80,7 @@ const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); a
   ok(patches.length === 0 && posts.length === 0 && (await pg.locator("#vrSave, #vrReview").count()) === 0, "Sandbox: nothing is written and there is no save button");
   await pg.selectOption("#vr_snorkel", "recVB|boat"); ok(await pg.locator("#vrDyn .diff").count() === 0, "picker: choosing the original vendor again clears the change (no duplicate link)");
   await pg.selectOption("#vr_gear", "recVA|set"); ok(/alpha_gear_full_2027/.test(await text(pg, "#vrDyn")) && /bravo_snorkel_gear_2027/.test(await text(pg, "#vrDyn")), "picker: gear choice replaces the old gear record and leaves the snorkel record alone");
-  await pg.click("#vrReset"); ok(await pg.inputValue("#vr_gear") === "none" || (await pg.inputValue("#vr_gear")) === "recVB|set" || true, "picker: Discard choices resets");
+  await pg.click("#vrReset"); ok(await pg.inputValue("#vr_gear") === "recVB|set" || (await pg.inputValue("#vr_gear")) === "__current" || (await pg.locator("#vrDyn .diff").count()) === 0, "picker: Discard choices clears every pending change");
   await pg.close();
   pg = await open(br, url); await goTab(pg, ID.EARLY);
   ok(await pg.inputValue("#vr_snorkel") === "none", "picker: a booking with nothing linked starts at 'no vendor'");
@@ -111,6 +111,16 @@ const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); a
   await pg.close();
   pg = await open(br, url); await goTab(pg, ID.NOCAP);
   ok(/Dive pricing is entered manually/.test(await text(pg, "#vrPanel")) && await pg.locator("#vr_dive").count() === 1, "dive category appears when dive rates are already linked");
+  await pg.close();
+  /* ---- Stage 4: preview in the page ---- */
+  pg = await open(br, url); await goTab(pg, ID.A); await pg.selectOption("#vr_snorkel", "recVA|pp");
+  let pvt = await text(pg, "#vrPrev");
+  ok(/Vendor costs\s*\$1,800\.00\s*\$1,325\.00/.test(pvt) && /Total package price\s*\$10,000\.00\s*\$9,501\.25/.test(pvt), "preview: Vendor Costs and Total Package Price before and after");
+  ok(/25 people × \$75\.00 × 2 trips = \$3,750\.00/.test(await text(pg, "#vrDyn")) && /Sales tax is calculated by Airtable/.test(pvt + await text(pg, "#vrDyn")), "preview: per-person line is spelled out and tax is called out");
+  await pg.selectOption("#vr_snorkel", "recVB|boat"); await pg.selectOption("#vr_gear", "recVA|set");
+  ok(/alpha_gear_full_2027/.test(await text(pg, "#vrDyn")) && /Per-boat|per boat|departures/.test(await text(pg, "#vrDyn")) === false, "preview: a gear-only change on a per-boat booking is listed as a rate change");
+  ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "no internal margin or total cost appears in the panel");
+  await pg.selectOption("#roleSel", "staff"); ok(!/Net income|margin|Total program cost/i.test(await text(pg, "#vrPanel")), "staff view: panel carries no internal fields");
   await pg.close();
   // ==== END OF STAGES ====
   await br.close(); srv.close(); srvOpen.close(); srvOff.close(); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

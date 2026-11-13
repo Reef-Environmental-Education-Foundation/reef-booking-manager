@@ -286,7 +286,19 @@
     }
     return errs + chg + capHtml;
   }
-  function vrPreview(b, p) { return ""; }
+  /* Cost preview, staff only: Vendor Costs and Total Package Price before and after (the "before" is Airtable's stored value). */
+  function vrPreview(b, p) {
+    if (!p.changedRates) return "";
+    if (!P.isReady()) return '<div class="note">Price preview unavailable: the Rates table constants are not loaded. Airtable still recalculates the real price.</div>';
+    const pv = V.preview(b, S.vidx, p, P, inputsOf(b));
+    if (!pv.available) return `<div class="warn" id="vrPrev">${esc(pv.reason)}</div>${(pv.notes || []).map(n => `<div class="note">${esc(n)}</div>`).join("")}`;
+    const line = x => x.model === "pp" ? `${x.people} people × ${money2(x.rate)} × ${x.trips} trip${x.trips === 1 ? "" : "s"} = ${money2(x.cost)}` : x.model === "boat" ? `${x.departures} departures × ${money2(x.rate)} + gear ${money2(x.gearC)} = ${money2(x.cost)}` : "no snorkel rate linked";
+    const row = (l, a, c) => `<tr><td>${l}</td><td class="num">${a == null ? "—" : money2(a)}</td><td class="num">${c == null ? "—" : money2(c)}</td><td class="num ${c - a > 0.004 ? "delta-up" : c - a < -0.004 ? "delta-dn" : ""}">${a == null || c == null ? "—" : delta(c - a)}</td></tr>`;
+    return `<table class="pricecmp" id="vrPrev"><caption class="note">Cost preview (calculator estimate; Airtable's recalculated figure is the real one)</caption><tr><th>Line</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr>
+      ${row("Vendor costs", pv.vendorBefore, pv.vendorAfter)}${row("Total package price", pv.totalBefore, pv.totalAfter)}</table>
+      <div class="small">Snorkel before: ${esc(line(pv.before))}. After: ${esc(line(pv.after))}.</div>
+      <div class="note">Sales tax is calculated by Airtable and is not part of this comparison. Gratuities do not change with the vendor.</div>${pv.notes.map(n => `<div class="note">${esc(n)}</div>`).join("")}`;
+  }
   function vrPanel(b) {
     if (!S.vidx) return `<div class="card" id="vrPanel"><h3>Vendors and rates</h3><div class="warn">The Rates, Vendors and Activities tables could not be read${S.data && S.data.vdataError ? " (" + esc(S.data.vdataError) + ")" : ""}. Nothing can be shown or picked here until they load. Press Refresh from Airtable.</div></div>`;
     const cur = V.current(b, S.vidx), st = vpOf(b), arrival = String(b.g("arrival") || "").slice(0, 10) || null, miss = String(b.g("vendorMissing") || "").trim(), vc = typeof b.g("vendorAuto") === "number" ? b.g("vendorAuto") : 0;

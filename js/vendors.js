@@ -252,5 +252,38 @@ window.ReefVendors = (function () {
     return { items: out, hasAmber: out.some(x => x.level === "amber"), snorkelers, assumed, divers: dv.value, checked };
   }
 
-  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots, initialChoice, plan, capacity, parseCount };
+
+  /* ---------- cost preview (staff only; customer-facing lines only, never cost or margin beyond Vendor Costs) ---------- */
+  const maxOf = a => a.length ? Math.max.apply(null, a) : null;
+  /* The highest linked value of each kind: Airtable's rollups take the highest, so the mirror does too. */
+  function mirrorRates(idx, ids) {
+    const rs = ids.map(i => idx.byId[i]).filter(r => r && r.value != null), sn = rs.filter(r => r.slot === "snorkel");
+    const charter = sn.filter(r => r.model === "boat"), cr = charter.slice().sort((a, b) => b.value - a.value)[0];
+    return { pp: maxOf(sn.filter(r => r.model === "pp").map(r => r.value)), charter: cr ? cr.value : null,
+      gear: maxOf(rs.filter(r => r.slot === "gear" && r.k.snorkel).map(r => r.value)), cap: cr ? capacityOf(idx, cr.vendorId).snorkel : null };
+  }
+  /* i: the booking's pricing inputs (students, chaps, staff, trips, acts). Returns what the vendor cost and Total Package Price would be after the change.
+     The "before" figures are Airtable's own stored values; the after figures are those plus the mirror's change, so anything the mirror does not model stays as Airtable has it. */
+  function preview(b, idx, p, P, i) {
+    const raw = b.raw, notes = [];
+    if (!p.changedRates) return { available: false, reason: "No rate change." };
+    if (!P || !P.isReady()) return { available: false, reason: "The Rates table constants are not loaded, so no price preview is possible. Airtable still recalculates the real price." };
+    const model = txt(raw[F.pricingModel]);
+    if (/Discovery|Legacy/.test(model)) return { available: false, reason: "The calculator does not model the " + model + " pricing model. Airtable recalculates the real price." };
+    const s0 = P.snorkelVendor(i, mirrorRates(idx, p.links.before)), s1 = P.snorkelVendor(i, mirrorRates(idx, p.links.after));
+    const other = p.changedSlots.filter(x => x !== "snorkel" && x !== "gear");
+    if (other.length) notes.push("Changes to " + other.map(x => SLOT_LABEL[x].toLowerCase()).join(", ") + " are not priced in this preview. Airtable recalculates them.");
+    if (p.changedSlots.includes("gear") && s1.model === "pp") notes.push("Per-person snorkel pricing does not add gear, so a gear change does not alter the preview.");
+    const inc = s0.incomplete.concat(s1.incomplete);
+    if (inc.length) return { available: false, reason: "Missing for the calculator: " + inc.join(", ") + ". No cost preview until it is on file.", notes };
+    const stored = typeof raw[F.vendorAuto] === "number" ? raw[F.vendorAuto] : 0, total = typeof raw[F.total] === "number" ? raw[F.total] : null;
+    const delta = Math.round((s1.cost - s0.cost) * 100) / 100, disc = +raw[F.discount] || 0, upl = typeof raw[F.upliftOverride] === "number" ? raw[F.upliftOverride] : (P.R.uplift || 0), factor = 1 + upl - disc;
+    const manual = typeof raw[F.manualVendorEst] === "number" && raw[F.manualVendorEst] > 0;
+    if (manual) notes.push("This booking uses the manual Estimated Vendor Cost, so a rate change does not change its total.");
+    if (s0.model === "none" && s1.model === "none") notes.push("No snorkel rate is linked before or after, so the preview shows no change.");
+    const vendorAfter = Math.round((stored + delta) * 100) / 100, totalAfter = total == null ? null : Math.round((total + (manual ? 0 : delta * factor)) * 100) / 100;
+    return { available: true, before: s0, after: s1, delta, vendorBefore: stored, vendorAfter, totalBefore: total, totalAfter, factor, manual, notes, expectedTotal: totalAfter };
+  }
+
+  return { SLOTS, SLOT_LABEL, ALLOWLIST, index, classify, keyInfo, stemOf, hidden, pickPerStem, capacityOf, options, optionLabel, modelLabel, linked, current, matchOption, conflicts, neededSlots, initialChoice, plan, capacity, parseCount, mirrorRates, preview };
 })();
