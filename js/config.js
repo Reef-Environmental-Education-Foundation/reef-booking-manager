@@ -82,7 +82,7 @@ window.REEF_CONFIG = {
 
   /* Inputs the Airtable guardrail automation watches (wflxS2mTwBFYpj5kC). Editing any while Approved to Share is ON
      un-approves, bumps the Proposal Version and alerts Martha in Slack. Read from the live automation 2026-11-03. */
-  GUARDRAIL_WATCHED: ["students","chaps","arrival","departure","activities","itinLinks","sessions","fullDays","arrDepDays","buses","boatTrips","location","grade","discount","upliftOverride","freeChapOverride","manualVendorEst","addVendor","taxExempt","materialsFee"],
+  GUARDRAIL_WATCHED: ["students","chaps","arrival","departure","activities","itinLinks","sessions","fullDays","arrDepDays","buses","boatTrips","location","grade","discount","upliftOverride","freeChapOverride","manualVendorEst","addVendor","taxExempt","materialsFee","pricingRates","divers","snorkelers"],
 
   /* v1 editable fields (Live and Sandbox). type drives validation, group drives layout, watched = the guardrail watches it,
      customerFacing = the text can appear on the school's pages after the next publish. Price inputs, vendor overrides, sessions, buses,

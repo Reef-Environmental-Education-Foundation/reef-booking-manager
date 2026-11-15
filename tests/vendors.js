@@ -14,6 +14,7 @@ const R = id => idx.byId[id], ids = list => list.map(r => r.id).sort().join();
 
 /* ---- Stage 1: config and classification ---- */
 ok(F.divers === "fldaBe4HJfQI1BmCC" && F.snorkelers === "fldSUco1o4mGgwu3T" && F.pricingRates === "fldsQ4wzMfg0qLlVM" && F.vendorMissing === "fldIxxmRGSbWqJV49", "config F: # Divers, # Snorkelers, Pricing Rates and Vendor Rates Missing field IDs");
+ok(["pricingRates", "divers", "snorkelers"].every(k => C.GUARDRAIL_WATCHED.includes(k)) && C.F.pricingRates === "fldsQ4wzMfg0qLlVM" && C.F.divers === "fldaBe4HJfQI1BmCC" && C.F.snorkelers === "fldSUco1o4mGgwu3T", "config GUARDRAIL_WATCHED includes Pricing Rates (fldsQ4wzMfg0qLlVM), # Divers (fldaBe4HJfQI1BmCC) and # Snorkelers (fldSUco1o4mGgwu3T)");
 ok(!("pricingRates" in C.EDITABLE) && !("divers" in C.EDITABLE) && !("snorkelers" in C.EDITABLE) && Object.keys(C.EDITABLE).length === 9, "config EDITABLE is untouched: no link field and no picker field in it");
 ok(JSON.stringify(V.ALLOWLIST) === JSON.stringify(["pricingRates", "divers", "snorkelers"]), "vendors.js write allowlist is exactly Pricing Rates, # Divers, # Snorkelers");
 ok(!/WRITES_ENABLED\s*[:=]/.test(fs.readFileSync(path.join(root, "js/vendors.js"), "utf8")), "vendors.js never sets WRITES_ENABLED");
