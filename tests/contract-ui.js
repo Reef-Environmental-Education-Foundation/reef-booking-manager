@@ -10,7 +10,7 @@ let patches = [], posts = 0;
 const srv = http.createServer((q, r) => { const p = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]); fs.readFile(p, (e, d) => { if (e) { r.writeHead(404); r.end(); } else { r.writeHead(200, { "Content-Type": p.endsWith(".js") ? "text/javascript" : p.endsWith(".css") ? "text/css" : "text/html" }); r.end(d); } }); });
 (async () => {
   await new Promise(r => srv.listen(0, r)); const url = "http://localhost:" + srv.address().port + "/";
-  const br = await chromium.launch(); const pg = await br.newPage({ viewport: { width: 1280, height: 1100 } }); const errs = []; pg.on("pageerror", e => errs.push(e.message));
+  const br = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}); const pg = await br.newPage({ viewport: { width: 1280, height: 1100 } }); const errs = []; pg.on("pageerror", e => errs.push(e.message));
   await pg.route("https://api.airtable.com/**", async route => { const rq = route.request(), u = rq.url();
     if (/meta\/whoami/.test(u)) return route.fulfill({ json: { id: "usrX", email: "tester@example.org", scopes: ["data.records:read", "data.records:write"] } });
     if (rq.method() === "PATCH") { const b = JSON.parse(rq.postData()); patches.push(b); Object.assign(rec.fields, b.fields);

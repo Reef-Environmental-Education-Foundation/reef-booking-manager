@@ -152,3 +152,17 @@ dialog.dlg::backdrop{background:rgba(10,20,30,.6)}
 .toast[hidden]{display:none}
 td,th{overflow-wrap:anywhere}
 @media(max-width:600px){.mb-text+.mb-btn,.mb-why,.mb-count{margin-left:0}.dlg-foot .btn{flex:1}}
+
+/* Vendors and rates panel */
+.c-pend{background:#fff3b0;color:#5c4600;border-color:#e0c64a}
+.vr-amber{font-size:12px;color:#7a4a00;background:var(--amber-l);border-radius:6px;padding:2px 6px;margin-top:3px;display:inline-block}
+.vr-missing{background:var(--red-l);border:1px solid var(--red);color:#7d1510;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px}
+.vr-tbl .vr-grp th{background:var(--teal-l);color:var(--navy);text-transform:none;letter-spacing:0;font-size:12.5px}
+.vr-slot{border-top:1px solid var(--line);padding:10px 0}
+.vr-slot.chg{background:var(--amber-l);border-radius:8px;padding:10px}
+.vr-amberbox{background:var(--amber-l);border:1px solid #efd38f;border-left:5px solid var(--amber);border-radius:8px;padding:7px 10px;margin:6px 0;font-size:13px;color:#5c3b00}
+.vr-ok{color:#1d6b43}
+.vr-info{background:var(--blue-l);border:1px solid #c3d6ee;border-radius:8px;padding:6px 10px;margin:6px 0;font-size:13px}
+.vr-notes,.vr-cap{font-size:13px;margin:4px 0}
+.vr-opt{margin-top:6px}
+.vr-counts{margin:10px 0}

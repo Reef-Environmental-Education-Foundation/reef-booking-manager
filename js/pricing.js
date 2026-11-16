@@ -77,5 +77,21 @@ window.ReefPricing = (function () {
     const total = r2(sub + upl - disc);
     return { people, freeChap, paid, aboard, prog, sup, camp, perBoat, departures, vessels, waves, cap, rate: +rate || 0, boats, gearC, gearIncluded: gearIncluded(i), kayaks, vehicles, manual, vendors, vendorsLine, penn, gr, addV, sub, upl, disc, total, incomplete, unsupported, supported: unsupported.length === 0 };
   }
-  return { R, calc, load, isReady: () => ready };
+  /* Vendor snorkel cost from the rate records LINKED to a booking (vendor and rate picker, js/vendors.js). Mirrors Airtable's behaviour:
+     per person (a snorkel_pp rate is linked): (students + chaperones) x rate x trips, REEF staff free, no charter or gear added;
+     per boat (charter rate only): departures x charter + people x gear, where departures = CEILING(aboard / capacity) x trips (the same rule as calc()).
+     i: {students, chaps, staff, trips, acts}. x: {pp, charter, gear, cap}: the highest linked value of each kind (Airtable's rollups take the highest).
+     Pure and rate-free: every number comes in through x. Zero trips count as 1 (as in Airtable). */
+  function snorkelVendor(i, x) {
+    x = x || {}; const out = { cost: 0, model: "none", people: (i.students || 0) + (i.chaps || 0), trips: i.trips > 0 ? i.trips : 1, departures: 0, boats: 0, gearC: 0, incomplete: [] };
+    if (!hasAct(i, "Boat Snorkel")) return out;
+    if (x.pp != null) { out.model = "pp"; out.rate = x.pp; out.cost = r2(out.people * x.pp * out.trips); return out; }
+    if (x.charter != null) {
+      out.model = "boat"; out.rate = x.charter; if (!x.cap) { out.incomplete.push("capacity per vessel"); return out; }
+      const aboard = out.people + (i.staff || 0); out.departures = Math.ceil(aboard / x.cap) * out.trips; out.boats = out.departures * x.charter;
+      out.gearC = out.people * (x.gear || 0); out.gear = x.gear || 0; out.cost = r2(out.boats + out.gearC);
+    }
+    return out;
+  }
+  return { R, calc, load, snorkelVendor, isReady: () => ready };
 })();

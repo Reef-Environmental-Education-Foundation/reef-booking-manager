@@ -66,7 +66,15 @@ window.REEF_CONFIG = {
     // links
     scheduleLinks: "fldU7Wh5iEubsYwxI", itinLinks: "fldAmdGgbJThGCufS", commsLinks: "fldu4exjBCBHPiPlk", checklistLinks: "fld4sbsDUaysZquHi", changeLinks: "fldTKpwFsYBDlqLVA",
     activities: "fldLJq96jdno7p9sS", programType: "fldnMmE0udfDe8ke2", cohorts: "fldxhHNKnDAIN4ubk", rotation: "fldOr4EoGbIrunomi",
-    schedNotes: "fldLM08w3h7sokUZF", walkthrough: "fldDUh5DMgXDOVaoN", daysToArrival: "fldVkGBpwOofwLobv"
+    schedNotes: "fldLM08w3h7sokUZF", walkthrough: "fldDUh5DMgXDOVaoN", daysToArrival: "fldVkGBpwOofwLobv",
+    // vendor and rate picker (js/vendors.js). pricingRates is a LINK field: it is written only by js/vendors.js, never via EDITABLE.
+    pricingRates: "fldsQ4wzMfg0qLlVM", vendorMissing: "fldIxxmRGSbWqJV49", rollSnorkelPP: "fldZ0vo6O2MEr7dnZ",
+    divers: "fldaBe4HJfQI1BmCC", snorkelers: "fldSUco1o4mGgwu3T"   // new count fields, blank on existing bookings, no formula reads them yet
+  },
+  /* Vendor and rate picker: the ONLY fields js/vendors.js may write (its own allowlist, mirrored by tests). Keys of F. */
+  VENDOR_PICKER: {
+    WRITE_FIELDS: ["pricingRates", "divers", "snorkelers"],
+    COUNTS: { divers: { label: "# Divers", min: 0, max: 400 }, snorkelers: { label: "# Snorkelers", min: 0, max: 400 } }
   },
   /* Fields that show REEF's internal cost or margin. A scoped token can still read these.
      Hiding them in the page is a courtesy for the "Staff view", NOT security.  */
@@ -74,7 +82,7 @@ window.REEF_CONFIG = {
 
   /* Inputs the Airtable guardrail automation watches (wflxS2mTwBFYpj5kC). Editing any while Approved to Share is ON
      un-approves, bumps the Proposal Version and alerts Martha in Slack. Read from the live automation 2026-11-03. */
-  GUARDRAIL_WATCHED: ["students","chaps","arrival","departure","activities","itinLinks","sessions","fullDays","arrDepDays","buses","boatTrips","location","grade","discount","upliftOverride","freeChapOverride","manualVendorEst","addVendor","taxExempt","materialsFee"],
+  GUARDRAIL_WATCHED: ["students","chaps","arrival","departure","activities","itinLinks","sessions","fullDays","arrDepDays","buses","boatTrips","location","grade","discount","upliftOverride","freeChapOverride","manualVendorEst","addVendor","taxExempt","materialsFee","pricingRates","divers","snorkelers"],
 
   /* v1 editable fields (Live and Sandbox). type drives validation, group drives layout, watched = the guardrail watches it,
      customerFacing = the text can appear on the school's pages after the next publish. Price inputs, vendor overrides, sessions, buses,
