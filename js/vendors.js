@@ -198,7 +198,7 @@ window.ReefVendors = (function () {
     });
     // approvals and warnings
     const approved = !!raw[F.approved], propVer = raw[F.propVer] || 0, status = txt(raw[F.status]), agree = txt(raw[F.agreementStatus]);
-    const unapproves = approved && changedRates, legacy = txt(raw[F.pricingModel]) === "Legacy (completed)" || /completed/i.test(status), locked = legacy || /^(sent|signed)$/i.test(agree) || /signed/i.test(status);
+    const unapproves = approved && diff.some(d => C.GUARDRAIL_WATCHED.includes(d.key)), legacy = txt(raw[F.pricingModel]) === "Legacy (completed)" || /completed/i.test(status), locked = legacy || /^(sent|signed)$/i.test(agree) || /signed/i.test(status);
     const name = String(raw[F.name] || ""), test = name.startsWith(C.TEST_PREFIX), pendingAdded = add.filter(r => r.pending);
     const warnings = [], acks = [];
     if (unapproves) { warnings.push("Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished."); acks.push({ id: "approve", label: "I understand this un-approves the proposal" }); }

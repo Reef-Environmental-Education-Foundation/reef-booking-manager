@@ -86,7 +86,14 @@ p = P(B([], { [F.divers]: 8 }), {}, { divers: "" }); ok(p.ok && p.fields[F.diver
 p = P(B(["recR8"], { [F.approved]: true, [F.propVer]: 2 }), { snorkel: "recVA|pp" });
 ok(p.warnings[0] === "Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished." && p.acks.some(a => a.id === "approve") && p.predicted.propVer === 3 && p.predicted.approved === false, "plan: Approved to Share shows the exact un-approve warning and needs a tick");
 p = P(B(["recR8"], { [F.approved]: true }), {}, { divers: "5" });
-ok(!p.warnings.some(w => /un-approve/.test(w)) && !p.acks.some(a => a.id === "approve") && p.predicted.approved === true, "plan: # Divers and # Snorkelers alone say nothing about un-approving (not yet watched by the guardrail)");
+ok(p.warnings[0] === "Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished." && p.acks.some(a => a.id === "approve") && p.predicted.approved === false && p.predicted.propVer === 1 && Object.keys(p.fields).join() === F.divers, "plan: # Divers alone on an Approved booking shows the same un-approve warning and tick, and still writes only # Divers");
+p = P(B(["recR8"], { [F.approved]: true }), {}, { snorkelers: "7" });
+ok(p.warnings[0] === "Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished." && p.acks.some(a => a.id === "approve") && Object.keys(p.fields).join() === F.snorkelers, "plan: # Snorkelers alone on an Approved booking shows the un-approve warning and tick");
+p = P(B(["recR8"], { [F.approved]: true, [F.propVer]: 2 }), { snorkel: "recVA|pp" }, { divers: "5" });
+ok(p.warnings.filter(w => /un-approve/.test(w)).length === 1 && p.acks.filter(a => a.id === "approve").length === 1 && p.predicted.propVer === 3, "plan: rates and counts together on an Approved booking show one warning and one tick");
+p = P(B(["recR8"]), {}, { divers: "5", snorkelers: "7" });
+ok(!p.warnings.some(w => /un-approve/.test(w)) && !p.acks.some(a => a.id === "approve") && p.predicted.approved === false, "plan: counts on a booking that is not Approved show no un-approve warning and no tick");
+ok(/C\.GUARDRAIL_WATCHED/.test(fs.readFileSync(path.join(root, "js/vendors.js"), "utf8")), "vendors.js reads GUARDRAIL_WATCHED rather than keeping its own list");
 p = P(B(["recR8"], { [F.agreementStatus]: "Signed" }), { snorkel: "recVA|pp" }); ok(p.acks.some(a => a.id === "locked") && /Contract Status Signed/.test(p.warnings.join()), "plan: Signed needs the extra tick");
 p = P(B(["recR8"], { [F.agreementStatus]: "Sent" }), {}, { divers: "5" }); ok(p.acks.some(a => a.id === "locked"), "plan: Contract Status Sent needs the extra tick, even for a count change");
 p = P(B(["recR8"], { [F.pricingModel]: "Legacy (completed)" }), { snorkel: "recVA|pp" }); ok(p.acks.some(a => a.id === "locked") && /Legacy \(completed\)/.test(p.warnings.join()), "plan: Legacy (completed) needs the extra tick");
@@ -200,7 +207,7 @@ ok(await rejects(() => g.hw.ReefVendors.commit(gb, g.plan(gb, { snorkel: "recVA|
 g = harness({ WRITES_ENABLED: true }); gb = g.set([], { [F.approved]: true }); await g.goLive();
 gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, { snorkel: "recVD|pp" }), LIVE({ acks: ["approve"] })); ok(gr.saved && g.writes().length === 2, "commit: an approved booking saves once its un-approve tick is given");
 g = harness({ WRITES_ENABLED: true }); gb = g.set([], { [F.approved]: true }); await g.goLive();
-gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, {}, { divers: "4" }), LIVE()); ok(gr.saved && JSON.stringify(Object.keys(g.writes()[0].body.fields)) === JSON.stringify([F.divers]), "commit: a counts-only save on an approved booking needs no un-approve tick and writes only # Divers");
+gr = await g.hw.ReefVendors.commit(gb, g.plan(gb, {}, { divers: "4" }), LIVE({ acks: ["approve"] })); ok(gr.saved && JSON.stringify(Object.keys(g.writes()[0].body.fields)) === JSON.stringify([F.divers]), "commit: a counts-only save on an approved booking, with the un-approve tick, writes only # Divers");
 ok(/typecast:\s*false/.test(fs.readFileSync(path.join(root, "js/adapter-airtable.js"), "utf8")) && !/_patch|_create|fetch\(/.test(fs.readFileSync(path.join(root, "js/vendors.js"), "utf8").replace(/D\._patch\(C\.T\.bookings, booking\.id, p\.fields\)/, "")), "vendors.js has no second write path (its only write is the shared D._patch, and it never calls fetch)");
 
 

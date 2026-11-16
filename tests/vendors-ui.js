@@ -168,7 +168,9 @@ const live = async pg => { await pg.click("#mbLive"); await pg.click("#lvGo"); a
   ok(/Predicted: Approved to Share off, Proposal Version 2\. Observed in Airtable: Approved to Share off, Proposal Version 2\. ✓ As predicted/.test(await text(pg, "#vrSaved")), "approved: after save shows predicted vs observed approval and Proposal Version");
   await pg.close(); afterPatch = null; resetRec(ID.APPR, { [f.approved]: false === 1, [f.propVer]: 1, [f.pricingRates]: ["recR8"], [f.total]: 10000 }); bookings.find(x => x.id === ID.APPR).fields[f.approved] = true;
   pg = await open(br, url); await goTab(pg, ID.APPR); await live(pg); await goTab(pg, ID.APPR); await pg.fill("#vr_divers", "4");
-  ok(!/un-approve/.test(await text(pg, "#vrDyn")), "approved: # Divers alone says nothing about un-approving");
+  ok(/Saving will un-approve this proposal, bump the Proposal Version and alert Martha in Slack; the live page stays up until re-approved and republished\./.test(await text(pg, "#vrDyn")), "approved: # Divers alone shows the un-approve warning");
+  dg = await review(pg); await pg.fill("#cfReason", "Test: approved booking count change");
+  ok(await pg.isDisabled("#cfSave") && await pg.locator("#confirmDlg .vrAck").count() === 1, "approved: a counts-only save needs the un-approve box ticked before Save enables");
   await pg.close();
   // signed and legacy
   for (const [id, re, nm] of [[ID.SIGNED, /Contract Status Signed/, "Signed"], [ID.LEGACY, /Legacy \(completed\)/, "Legacy (completed)"]]) {
